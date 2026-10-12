@@ -103,6 +103,24 @@ Los reportes muestran las fechas registradas durante el año y hasta la fecha se
 - Puede guardar el PDF desde el visor del navegador. El PDF utiliza la etiqueta CRC para la moneda.
 - Puede exportar CSV de nómina y vacaciones; las celdas que podrían interpretarse como fórmulas se neutralizan.
 
+## Aguinaldo e historial salarial
+
+En **Aguinaldo**, seleccione el año para consultar ingresos brutos registrados, acumulado y detalle por trabajador. El ciclo va del **1 de diciembre del año anterior al 30 de noviembre** del año seleccionado. Se suman los ingresos y se divide entre 12, incluso cuando la relación laboral cubre menos meses. La base incluye los pagos salariales ordinarios y extraordinarios. [Referencia del MTSS](https://www.mtss.go.cr/temas-laborales/index.html).
+
+La aplicación usa **salario quincenal revisado más comisiones, antes de los rebajos**, de nóminas cerradas cuyo periodo haya terminado al corte. Las nóminas anteriores ya registradas se incluyen automáticamente; no se vuelven a copiar. El corte es hoy o el 30 de noviembre del ciclo, si ya terminó. Los borradores y periodos posteriores al corte no suman. Cambiar el salario actual del perfil no cambia las nóminas cerradas ni el aguinaldo de esas quincenas.
+
+Para salarios anteriores al uso del programa, pulse **Registrar salario histórico**. Seleccione trabajador, año y mes; escriba el **total bruto real del mes**, incluidas comisiones y demás pagos salariales, y su referencia. Solo se admiten meses terminados dentro de la relación laboral. No se reconstruyen ingresos antiguos a partir del salario actual.
+
+El **Detalle** muestra los 12 meses, quincenas registradas, históricos, origen del ingreso y periodos pasados sin información. **Editar** corrige un histórico; **Retirar** lo excluye con motivo y conserva el registro/auditoría; un registro retirado puede reactivarse. Un mes sin ingreso necesita un cero explícito con referencia, mientras que un mes sin datos se marca pendiente. Se incluyen empleados con salida si corresponden al ciclo.
+
+Un histórico mensual no se mezcla con nóminas del mismo mes para el mismo trabajador, ni siquiera con borradores. Si el mes ya tiene alguna quincena registrada, complete la restante en **Nómina**. Para reemplazar un histórico por nóminas, retírelo antes de crear esas quincenas. No se eliminan nóminas cerradas para registrar históricos.
+
+El acumulado se actualiza al cerrar nóminas o guardar/corregir/retirar históricos. Se suma en céntimos exactos y se redondea una sola vez por trabajador. **Exportar CSV** conserva el corte y advierte cuántas quincenas están sin datos. Los resultados con historial incompleto requieren completar la información antes de usarlos para pagar.
+
+Esta sección calcula el acumulado registrado; no proyecta salarios futuros ni registra la liquidación o el pago del aguinaldo. Horas extra y otros pagos salariales futuros necesitarán campos en la nómina; para históricos sí se debe introducir su total bruto completo. No hay manejo automático de subsidios o licencias especiales.
+
+La mejora agrega `db/003-aguinaldo.sql`, que crea únicamente `salary_history`, sin modificar empleados ni nóminas existentes. La migración se probó con registros previos y se aplicó en desarrollo. Para producción, respalde y siga [ACTUALIZACIONES.md](ACTUALIZACIONES.md); no restaure datos de desarrollo. Después de actualizar, reinicie Node.js y recargue con Ctrl+F5.
+
 ## Cuentas
 
 Cada administrador usa su propio correo de acceso y contraseña de al menos 12 caracteres. Las contraseñas se almacenan con scrypt y sal aleatoria. Las sesiones duran ocho horas, se guardan en PostgreSQL y usan cookies HttpOnly/SameSite y protección CSRF. El ingreso tiene límite de intentos.

@@ -8,9 +8,13 @@ La primera versión funcional de la aplicación de recursos humanos ya está imp
 
 El usuario confirmó el 2026-10-12 que el traslado al nuevo servidor ya se completó y que la aplicación está corriendo allí. **La base de esa computadora es producción y la única que importa para conservar los registros de la empresa. Esta computadora es desarrollo/validación; sus datos de prueba no se transfieren a producción.** Este estado es informado por el usuario; no se accedió al servidor para verificarlo.
 
-La mejora actual es **Enviar correo junto al PDF en Nómina**. Está implementada y probada: confirmación con remitente, correo actual del perfil y adjunto PDF; cierre de nómina previo; historial y confirmación de reenvío. El usuario confirmó **contabilidad@circuitocinco.com** mediante **Gmail / Google Workspace**. No requiere cambios SQL. Integración: 17 entradas aprobadas; navegador: flujo completo, envío/reenvío SMTP simulado y escritorio/móvil aprobados, sin errores inesperados. **Falta configurar la credencial autorizada en el `.env` del servidor y comprobar una entrega real**. No se modificó ningún `.env` ni se envió correo real. Procedimiento: `CORREO_COLILLAS.md`.
+La mejora actual es **Aguinaldo e historial salarial mensual**, solicitada después del commit de correo. Está implementada y probada: nueva sección Aguinaldo, acumulado por empleado, detalle diciembre–noviembre, nóminas cerradas y salarios brutos históricos por mes (opción confirmada por el usuario), corrección/retiro/reactivación con auditoría, pendientes y CSV. La fórmula suma los ingresos brutos registrados y divide entre 12. No reconstruye salarios a partir del salario actual ni suma borradores o periodos futuros. `db/003-aguinaldo.sql` agrega `salary_history` y ya se aplicó **solo en desarrollo**. Pasaron 13 pruebas de cálculo, 18 entradas de integración, navegador completo y respaldo/restauración. El usuario pidió guardar esta mejora en Git y se creó el commit local **Agregar aguinaldo e historial salarial mensual** en `main`, con migración, pruebas y documentación. **Falta subirlo al remoto y actualizar producción; no se hizo push ni despliegue.** Para verla aquí: reiniciar Node.js en su terminal y recargar con Ctrl+F5. La explicación de uso está en README.
 
-Se mantiene el flujo de versiones: pruebas locales, actualización de código mediante Git, nuevas migraciones cuando hagan falta, respaldo previo y verificación antes de reabrir el sistema. `ACTUALIZACIONES.md` y AGENTS.md documentan la separación. A petición del usuario se creó el commit local **Agregar envio de colillas por correo desde nomina** en `main`, incluyendo pruebas y documentación pendiente. No se hizo push ni se ejecutó una actualización en producción. Próximo paso para compartir esta versión: `git push` desde este repositorio y después seguir la guía de actualización en el servidor.
+La mejora anterior es **Enviar correo junto al PDF en Nómina**, guardada en el commit local `d9a9ad7`. El usuario confirmó **contabilidad@circuitocinco.com** mediante **Gmail / Google Workspace**. **Falta configurar la credencial autorizada en el `.env` del servidor y comprobar una entrega real**. No se modificó ningún `.env` ni se envió correo real. Procedimiento: `CORREO_COLILLAS.md`.
+
+Última confirmación: tras entender por qué octubre estaba excluido al corte del 12 de octubre, el usuario indicó «dejalo asi». **Queda confirmado mantener el criterio actual: nómina cerrada y fin del periodo anterior o igual al corte.** La alternativa de sumar al cerrar anticipadamente no se implementará. No hay una decisión pendiente sobre ese filtro. Solo se actualizaron documentos de continuidad; no se consultaron salarios ni registros personales de su base.
+
+Se mantiene el flujo de versiones: pruebas locales, actualización de código mediante Git, nuevas migraciones cuando hagan falta, respaldo previo y verificación antes de reabrir el sistema. `ACTUALIZACIONES.md` y AGENTS.md documentan la separación. Correo y aguinaldo ya tienen commits locales en `main`; no se hizo push desde aquí ni se ejecutó una actualización en producción. Para compartir la versión, ejecutar git push y después actualizar el servidor según la guía, con respaldo previo y db:migrate para la nueva migración; no copiar la base de pruebas. El estado real del remoto no se inspeccionó en esta tarea.
 
 El usuario primero había indicado dos ubicaciones distintas, pero interrumpió esa consulta y reemplazó ese escenario por el traslado a un servidor de la LAN. La última indicación prevalece: no seguir preparando VPN o nube por las respuestas anteriores.
 
@@ -106,6 +110,14 @@ Interfaz HTML y JavaScript; servidor Node.js, aceptado expresamente; base Postgr
 
 Guardar todos los mensajes y respuestas en `conversacion.md`. Guardar todo lo realizado, lo que cambia, lo que se deja para después y el contexto suficiente para retomar en `proyecto.md`. Mantenerlos actualizados; no limitarse a un resumen de esta sesión.
 
+### 4.6 Aguinaldo (mejora del 2026-10-12)
+
+- Petición: conservar el salario de cada empleado para actualizar su monto acumulado de aguinaldo.
+- El usuario confirmó **ingresar salarios brutos históricos por mes** para los periodos anteriores al uso del programa.
+- Después de la explicación de octubre, el usuario confirmó mantener el corte temporal actual: solo incluir nóminas cerradas cuyo periodo haya terminado al corte, aunque otras ya estén ingresadas o cerradas anticipadamente.
+- Se verificó en el MTSS la regla de Costa Rica: ingresos salariales ordinarios/extraordinarios del 1 de diciembre anterior al 30 de noviembre del año, divididos entre 12. Comisiones incluidas antes de rebajos. [Asuntos laborales del MTSS](https://www.mtss.go.cr/temas-laborales/index.html).
+- Implementación elegida: sumar ingresos guardados de nóminas cerradas e históricos explícitos, preservando los importes de cada periodo. No es una orden de reconstruir meses faltantes usando el salario actual.
+
 ## 5. Decisiones de implementación de la primera versión
 
 Esta sección distingue reglas concretas elegidas durante el desarrollo de las peticiones expresas anteriores. Ya están implementadas; pueden revisarse con el usuario si lo solicita.
@@ -167,6 +179,21 @@ Esta sección distingue reglas concretas elegidas durante el desarrollo de las p
 
 ## 6. Funcionalidades implementadas
 
+### Mejora posterior: aguinaldo
+
+- Sección propia en la navegación para administradores; año seleccionable, acumulado, bruto, estado de empleado y advertencia de quincenas pasadas sin ingresos registrados.
+- Año del aguinaldo = año en que termina el ciclo en noviembre. Por defecto se muestra el ciclo en curso: en diciembre pasa al siguiente año. Se pueden consultar ciclos anteriores.
+- Corte = menor entre hoy (Costa Rica) y 30 de noviembre del ciclo. Se incluyen nóminas cerradas con fin de quincena anterior o igual al corte, más históricos activos cuyo mes terminó al corte. No se prorratea un mes/quincena en curso ni se proyectan ingresos futuros.
+- Los bruto/base/comisiones de cada nómina ya se conservaban en PostgreSQL. Se reutilizan sin copiar filas ni depender del salario vigente del perfil.
+- Detalle de 12 meses por persona, origen (histórico o quincenas), datos faltantes, importes incluidos y referencias de históricos.
+- Históricos mensuales: trabajador, año, mes, total bruto real y referencia obligatoria. Solo meses terminados con relación laboral; se admite cero explícito. Editar usa revisión concurrente; retirar exige motivo y conserva la fila/auditoría; reactivar permite corregirla.
+- Un empleado/mes puede tener históricos o nóminas, sin mezclarlos. Cualquier borrador o nómina del mes bloquea un histórico; un histórico activo bloquea crear o revisar filas salariales del mes. Un bloqueo transaccional común evita duplicados incluso si se crean simultáneamente. Si existe una quincena, completar la otra en Nómina.
+- Un dato faltante no equivale a salario cero. Los meses anteriores sin detalle se indican como pendientes. Se consideran las fechas de ingreso/salida para determinar quincenas esperadas y también se muestran empleados que salieron.
+- Suma con BigInt en céntimos y división por 12 con un solo redondeo final por trabajador. Total de empresa = suma de aguinaldos individuales ya redondeados.
+- CSV con bruto, acumulado, fechas del ciclo, corte y número de quincenas sin datos. La misma neutralización de fórmulas existente se aplica a nombres/códigos.
+- No registra pago o liquidación del aguinaldo; no genera colilla especial ni envío de aguinaldo. Tampoco automatiza horas extra, licencias, subsidios o clasificación de pagos no salariales. Se debe completar el historial antes de usar un acumulado incompleto para pagar.
+- Lectura del reporte dentro de una transacción repeatable read evita combinar fuentes de momentos distintos mientras se corrige un histórico y se crean nóminas.
+
 ### Mejora posterior: códigos internos
 
 - Cada apertura de Nuevo empleado consulta `GET /api/employees/next-code` con la sesión de administrador; no depende de una lista del navegador que pueda estar desactualizada.
@@ -188,6 +215,7 @@ Esta sección distingue reglas concretas elegidas durante el desarrollo de las p
 | Vacaciones | Vista previa del conteo, detalle de días excluidos, confirmación negativa, aprobación, cancelación y saldos. |
 | Feriados | Agregar y eliminar fechas concretas, con protección del historial aprobado. |
 | Nómina | Crear quincena, revisar importes manuales, ajustes con motivo, sincronizar plantilla y cerrar. |
+| Aguinaldo | Ingresos brutos de nóminas cerradas e históricos mensuales, acumulado, detalle, pendientes, corrección/retiro con auditoría y CSV. |
 | Colillas | PDF autenticado de cada fila, borrador identificado e instantánea de periodos cerrados. |
 | Correo | Botón visible junto al PDF, remitente y correo actual del perfil, confirmación, historial, errores y control de reenvío. Google Workspace confirmado; pendiente credencial y entrega real. |
 | Reportes | Vacaciones por año y fecha de saldo, detalle de fechas y exportación CSV; CSV de nómina. |
@@ -227,16 +255,20 @@ La interfaz está en español. La paleta verde de la primera entrega fue reempla
 | `server/app.js` | API Express, validaciones, permisos, operaciones, cierres y correo. |
 | `server/domain.js` | Fechas civiles, meses completos, días laborales, saldos y nómina. |
 | `server/employee-codes.js` | Sugerencia del siguiente código CC y conservación del avance. |
+| `server/aguinaldo.js` | Ciclo diciembre–noviembre, fuentes salariales, pendientes y cálculo preciso del acumulado. |
 | `server/auth.js` | Hashes, sesiones, cookies, CSRF y gestión de autenticación. |
 | `server/db.js` | Pool pg, transacciones, migraciones y escritura de auditoría. |
 | `server/pdf.js` | Generación de colillas con PDFKit. |
 | `db/001-initial.sql` | Esquema inicial versionado. |
 | `db/002-employee-codes.sql` | Contador persistente inicializado con perfiles e historial existentes. |
+| `db/003-aguinaldo.sql` | Tabla de ingresos brutos históricos mensuales con revisión y estado, sin alterar datos anteriores. |
 | `scripts/local-postgres.js` | Preparar, iniciar y detener el clúster local exclusivo. |
 | `scripts/migrate.js` | Ejecutar migraciones. |
 | `scripts/backup.js` | Respaldo PostgreSQL en formato custom. |
 | `Iniciar.cmd` | Lanzador de Windows: inicia PostgreSQL del proyecto y Node.js. |
 | `tests/domain.test.js` | Pruebas de reglas de cálculo. |
+| `tests/aguinaldo.test.js` | Ciclo, proporcional, bruto, redondeo, periodos no incluidos, ceros y salida. |
+| `tests/aguinaldo.integration.test.js` | Históricos, nómina, cambios de salario, concurrencia, auditoría y conservación al migrar. |
 | `tests/helpers.js` | Preparación y limpieza de bases temporales para pruebas. |
 | `tests/integration.test.js` | Flujo API con PostgreSQL real y SMTP local simulado. |
 | `tests/employee-codes.test.js` | Secuencia CC, edición manual, inactivos, concurrencia y migración del historial. |
@@ -252,7 +284,7 @@ Solo se sirve `public/` como contenido estático. La interfaz y el API comparten
 
 ### Tablas
 
-`company`, `employees`, `users`, `sessions`, `holidays`, `vacations`, `payroll_periods`, `payroll_items`, `email_deliveries`, `audit_log`, `schema_migrations` y `employee_code_counter` (agregada en la mejora de códigos).
+`company`, `employees`, `users`, `sessions`, `holidays`, `vacations`, `payroll_periods`, `payroll_items`, `email_deliveries`, `audit_log`, `schema_migrations`, `employee_code_counter` (mejora de códigos) y `salary_history` (mejora de aguinaldo).
 
 Las migraciones se ejecutan al iniciar el servidor y mediante `npm run db:migrate`. Las migraciones aplicadas se registran por nombre. Para cambios futuros, agregar una nueva migración; no depender de editar una que ya se ejecutó.
 
@@ -327,10 +359,10 @@ Comprobaciones ejecutadas durante la implementación, el 2026-10-10. No se volvi
 
 | Comando/comprobación | Último resultado observado |
 | --- | --- |
-| `npm test` | 9 pruebas de dominio aprobadas. |
-| `npm run test:integration` | Repetido el 2026-10-12 tras la mejora de correo: 17 entradas aprobadas; adjunto, perfil vigente, concurrencia, reenvíos y fallos SMTP incluidos. |
-| `npm run test:browser` | Repetido el 2026-10-12: flujo completo, botón junto al PDF, bloqueos de borrador/configuración, confirmación, envío/reenvío SMTP local y escritorio/móvil aprobados. |
-| `npm run test:backup` | Repetido tras la mejora: restauración de datos, migraciones y consecutivo CC aprobada. |
+| `npm test` | Repetido el 2026-10-12: 13 pruebas de cálculos, incluyendo aguinaldo, aprobadas. |
+| `npm run test:integration` | Repetido el 2026-10-12 tras aguinaldo: 18 entradas aprobadas; históricos, migración con datos y carrera histórico/nómina incluidos. |
+| `npm run test:browser` | Repetido el 2026-10-12: flujo completo, aguinaldo/históricos/edición/detalle/CSV/móvil, nómina/PDF y envío simulado aprobados, sin errores inesperados. |
+| `npm run test:backup` | Repetido el 2026-10-12: restauración también de histórico salarial, importe exacto, referencia, estado y empleado aprobada. |
 | `npm audit --omit=dev` | 0 vulnerabilidades informadas. |
 | `npm run setup:local` repetido | Conservó la configuración existente. |
 | `npm run db:start` | Arranque correcto del clúster del proyecto. |
@@ -359,6 +391,7 @@ Tras el cambio de marca también se generaron e inspeccionaron `test-results/aut
 3. **Automatizar Caja y renta:** el usuario lo dejó para después. Hoy son montos escritos por quincena. Cualquier cálculo automático necesitará confirmar reglas aplicables antes de implementarlo.
 4. **Preparar operación definitiva del servidor:** el usuario ya lo levantó en la LAN. HTTPS, cookies seguras, proxy si corresponde, rol de base con privilegios mínimos, arranque como servicio y respaldo automático no se verificaron ni configuraron durante esta consulta.
 5. **Carga de información real:** el usuario la realizará en la computadora de producción. No inventar, precargar, reemplazar ni mezclar sus datos con los de validación.
+6. **Completar el historial de aguinaldo en producción:** ingresar salarios brutos de meses anteriores cuando se instale la mejora. Los datos reales no se conocen ni se cargaron en esta computadora. Cálculo y carga ya están implementados; registro de pago/liquidación o colilla de aguinaldo son posibles etapas futuras.
 
 ### Mejoras futuras propuestas; no son funcionalidades completadas ni órdenes pendientes inmediatas
 
@@ -595,6 +628,47 @@ Un intento puntual de consulta Node con `-e` perdió comillas al pasar por Power
 - `git commit -m "Agregar envio de colillas por correo desde nomina"` terminó con éxito. Se incorporó al mismo commit su registro en la memoria y el cierre de este turno mediante amend del commit recién creado; no se modificó historia publicada. Para consultar el identificador vigente: `git log -1 --oneline`.
 - No se hicieron cambios funcionales ni se repitieron pruebas ya aprobadas en el turno anterior. No se hizo push, se contactó el servidor de producción, se configuró SMTP o se enviaron mensajes.
 - Próximo paso: subir el commit al remoto con git push, actualizar producción mediante ACTUALIZACIONES.md y configurar correo mediante CORREO_COLILLAS.md cuando corresponda. La configuración de credencial y primera entrega real siguen pendientes.
+
+### 2026-10-12 — Aguinaldo e ingresos históricos por mes
+
+- El usuario pidió la segunda mejora: conservar salarios y actualizar el aguinaldo; preguntó si conocemos ese concepto. Se verificó la regla de Costa Rica en fuentes oficiales del MTSS, consultando asuntos laborales, calculadora y campaña de aguinaldo. Dos lecturas directas (calculadora y un criterio PDF) respondieron 403; se usó la página oficial de asuntos laborales y su contenido recuperado por búsqueda.
+- Se preguntó cómo tratar los salarios anteriores al programa. El usuario eligió «Ingresar los salarios brutos históricos por mes»; no se inventaron datos ni se reconstruyeron salarios antiguos desde el perfil.
+- Se añadieron db/003-aguinaldo.sql y server/aguinaldo.js. La migración solo crea salary_history, referenciada a empleados/administradores, con único empleado/año/mes, revision, active, importe y referencia.
+- server/app.js: reporte autenticado, lectura consistente, altas/ediciones/retiros de históricos con permisos existentes de administrador, validación de mes terminado y relación laboral, revisión concurrente y auditoría. Se agregó la protección contra históricos en savePayrollItem y el bloqueo común para crear fuentes excluyentes.
+- public/app.js: estado/carga/navegación de Aguinaldo, reporte anual, advertencias, detalle de 12 meses y fuentes, registro/edición/retiro/reactivación de históricos y CSV. No se modificaron salarios mensuales del perfil, cálculos de vacaciones, colillas o forma de cerrar nóminas.
+- package.json integra las nuevas pruebas de cálculo/integración. No cambió ninguna dependencia o lockfile. Se añadieron tests/aguinaldo.test.js y tests/aguinaldo.integration.test.js; tests/browser.js y tests/backup.test.js se ampliaron.
+- Pruebas: npm.cmd test → 13 aprobadas; npm.cmd run test:integration → 18 aprobadas; npm.cmd run test:browser → flujo completo aprobado, sin errores inesperados; npm.cmd run test:backup → 1 aprobada, recuperando también salary_history. Sintaxis comprobada para public/app.js, server/app.js y server/aguinaldo.js. No quedaron fallos pendientes.
+- Se verificaron 12 meses completos, proporcional dividido entre 12, bruto en vez de neto, exclusión de borradores/futuros, salida y ceros explícitos, redondeo de suma, corrección/retiro/reactivación, salario actualizado sin alterar periodos cerrados, duplicados y una carrera de alta de histórico vs creación de nómina. En una base temporal se reejecutó la migración nueva sobre empleados y nóminas existentes; se compararon filas completas antes/después, conservadas sin cambios.
+- En la revisión final se detectó que el número de bloqueo propuesto inicialmente (74210618) ya pertenecía a los códigos internos. Se separó el bloqueo salarial a 74210619 y se adquirió antes de bloquear empleados/periodos en revisión y sincronización de nómina. Se añadió una prueba simultánea de edición de perfil, revisión de nómina y alta de histórico para comprobar que las tres operaciones completan correctamente. No se observó un fallo real en producción; se corrigió el riesgo al revisar el código.
+- Después de ese ajuste se repitió npm.cmd run test:integration: 18 entradas aprobadas, 0 fallos, incluida la prueba simultánea nueva. La comprobación final git diff --check tampoco informó errores de espacios. Los demás resultados corresponden a las comprobaciones ya ejecutadas del mismo turno, sin nuevas modificaciones de interfaz, cálculo o esquema después de ellas.
+- Artefactos inspeccionados: test-results/aguinaldo.png, aguinaldo-detail.png y aguinaldo-mobile.png. El detalle usa desplazamiento vertical/horizontal en pantallas pequeñas, como el resto de tablas. Los datos son ficticios. Servidores/bases de pruebas se cerraron mediante sus helpers.
+- npm.cmd run db:migrate → «Base de datos actualizada» en la base local de desarrollo. No se transfirió la base a producción, no se crearon salarios ficticios en la base de la empresa y no se modificó .env ni el servicio PostgreSQL ajeno. No se detuvo el proceso Node del usuario: debe reiniciarlo para activar las rutas nuevas.
+- README actualizado con uso, regla, límites, fuentes, arranque y actualización. Conversación y decisiones de este turno conservadas en memoria. No se hizo commit, push o despliegue de esta segunda mejora.
+- Pendiente operativo: reiniciar/recargar localmente; después guardar la versión validada en Git cuando el usuario lo pida y actualizar producción con respaldo previo y migración nueva. Completar ingresos anteriores en producción y comprobar quincenas faltantes. Pago/colilla especial de aguinaldo, horas extra en nómina y tratamiento automático de licencias quedan fuera de esta entrega.
+
+### 2026-10-12 — Explicación de octubre posterior al corte del aguinaldo
+
+- El usuario preguntó por qué octubre figura como ₡0 incluido y sus dos quincenas como posteriores al corte pese a tener salarios registrados. Se conservó su selección en tabla en conversacion.md.
+- Se revisaron server/aguinaldo.js, el mensaje del detalle en public/app.js y las reglas documentadas en README. aguinaldoPeriod limita as_of a hoy o 30 de noviembre; aguinaldoReport exige nómina cerrada y end_date <= as_of.
+- Con la fecha actual del contexto del cliente (2026-10-12), el 15 y el 31 de octubre son posteriores. El cero representa bruto excluido del acumulado al corte, no salario registrado como cero. No se inspeccionó la base o reloj del servidor del usuario ni se atribuyó esta conducta a una obligación legal.
+- Se explicó que fue una decisión de implementación. Incluir inmediatamente las quincenas cerradas se plantea como alternativa ajustada a la expectativa expresada; sigue pendiente de que el usuario confirme esa preferencia. No se cambió código, datos, migraciones, Git o configuración ni se repitieron pruebas por una consulta explicativa.
+- Se actualizó el resumen y se guardaron pregunta, progreso y respuesta final. Próximo punto: si el usuario pide cambiar el criterio, conservar borradores excluidos y límites del ciclo anual, revisar textos/corte/CSV/pendientes y agregar pruebas para quincenas cerradas antes de su fin.
+
+### 2026-10-12 — Confirmación de mantener el corte temporal
+
+- El usuario aclaró que solo quería entender la exclusión de octubre y pidió dejar el funcionamiento como está.
+- Se confirmó mantener status closed y end_date <= corte. No se implementará la propuesta de sumar quincenas cerradas anticipadamente; la preferencia sobre este punto ya está resuelta.
+- Se actualizaron el resumen, requisitos y esta bitácora, y se guardaron su mensaje, actualización visible y respuesta final en conversacion.md. No hubo cambios de código, base, configuración, migraciones o Git; no se repitieron pruebas por esta confirmación documental.
+- Los pendientes de guardar la mejora de aguinaldo en Git y actualizar producción cuando el usuario lo solicite siguen vigentes.
+
+### 2026-10-12 — Commit de aguinaldo e historial salarial
+
+- El usuario pidió dejar listo el commit para subir la mejora de aguinaldo a Git. Se revisaron cambios y rama main, con d9a9ad7 como commit anterior de correo; el índice estaba vacío.
+- Se incluyeron 12 archivos: README.md, conversacion.md, proyecto.md, package.json, public/app.js, server/app.js, server/aguinaldo.js, db/003-aguinaldo.sql y pruebas de aguinaldo, integración, navegador y respaldo.
+- git diff --check y git diff --cached --check pasaron. git check-ignore confirmó exclusión de .env, .local, backups, test-results y node_modules. No se incluyeron salarios reales, archivos internos de PostgreSQL ni credenciales.
+- Se creó el commit local «Agregar aguinaldo e historial salarial mensual» en main. Se incorporaron al mismo commit la memoria y respuesta final mediante amend del commit recién creado, sin modificar historia publicada. El identificador vigente se consulta con git log -1 --oneline.
+- No hubo cambios funcionales ni se repitieron las pruebas ya aprobadas durante implementación; sus resultados siguen documentados. Se conserva el filtro de periodos terminados confirmado por el usuario. No se hizo push, nueva migración, respaldo, configuración de correo o despliegue en producción durante esta tarea de Git.
+- Próximo punto: subir con git push desde desarrollo; en producción seguir ACTUALIZACIONES.md y aplicar db:migrate después del respaldo/descarga. La tabla nueva preserva las nóminas y empleados existentes; los históricos reales se completarán en producción.
 
 ## 13. Protocolo de continuación
 

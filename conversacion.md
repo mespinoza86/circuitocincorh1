@@ -951,3 +951,134 @@ El commit está **guardado localmente**. Para subirlo al repositorio remoto, eje
 ```powershell
 git push
 ```
+
+## 93 — Usuario
+
+ahora quiero otra cosa, 2) que se guarde el salario de cada empleado, para que se vaya actualizando el monto de aguinaldo.; sabes que es el aguinaldo
+
+## 94 — Asistente: actualización de progreso
+
+Sí, conozco el aguinaldo. Voy a revisar la regla de cálculo en Costa Rica y cómo estamos guardando las nóminas, para explicarte cómo incorporar su acumulado por empleado.
+
+## 95 — Asistente: pregunta de aclaración
+
+Sí: el aguinaldo en Costa Rica se calcula sumando los salarios brutos del 1 de diciembre al 30 de noviembre y dividiendo entre 12. Para empezar con un acumulado completo, ¿cómo quieres manejar los salarios anteriores al uso del sistema?
+
+Opciones presentadas: «Ingresar los salarios brutos históricos por mes» y «Acumular únicamente las nóminas registradas en el sistema».
+
+## 96 — Usuario: respuesta a la pregunta
+
+Ingresar los salarios brutos históricos por mes
+
+## 97 — Asistente: actualización de progreso
+
+Sí: el aguinaldo se calcula con los ingresos brutos, incluidas las comisiones, antes de los rebajos. Vamos a usar los importes de las nóminas cerradas para conservar lo realmente registrado, aunque después cambie el salario del perfil.
+
+También agregaré la carga de salarios históricos por mes, como elegiste, y un detalle que avise si falta información. Evitaré que un mismo mes se cuente por histórico y por nómina. [Referencia del MTSS](https://www.mtss.go.cr/temas-laborales/index.html).
+
+## 98 — Asistente: actualización de progreso
+
+Ya está armada la sección **Aguinaldo**, con el acumulado por empleado y el detalle mensual. Los históricos se pueden corregir o retirar dejando constancia en el historial; los borradores de nómina no suman.
+
+Estoy comprobando los límites del periodo diciembre–noviembre, el redondeo y la protección contra duplicados. La nueva migración agrega una tabla para los históricos y conserva las nóminas existentes.
+
+## 99 — Asistente: actualización de progreso
+
+Pasaron las pruebas de cálculo, integración y navegador, incluida la edición de históricos y la vista móvil. También comprobé que el respaldo restaura los salarios históricos y que la migración conserva empleados y nóminas ya existentes.
+
+Voy a aplicar la migración en esta computadora de pruebas y guardar las instrucciones de uso. El servidor de producción sigue sin cambios.
+
+## 100 — Asistente: actualización de progreso
+
+La migración ya quedó aplicada aquí. Estoy terminando la revisión de operaciones simultáneas para que editar perfiles, registrar históricos y revisar nóminas funcione correctamente cuando haya varios administradores.
+
+## 101 — Asistente
+
+Sí. En Costa Rica, el aguinaldo se calcula sumando los **salarios brutos del 1 de diciembre anterior al 30 de noviembre**, incluidas las comisiones, y dividiendo entre **12**. Los rebajos de Caja, renta y préstamos no disminuyen esa base. [Referencia del MTSS](https://www.mtss.go.cr/temas-laborales/index.html).
+
+**Ya quedó implementada la sección Aguinaldo**, con:
+
+- Acumulado por empleado a partir de nóminas cerradas cuyos periodos hayan terminado.
+- Registro de **salarios brutos históricos por mes**, como elegiste.
+- Detalle mensual, correcciones con historial y exportación CSV.
+- Avisos cuando faltan ingresos y protección para evitar contar un mes dos veces.
+
+Cambiar el salario actual del perfil conserva los importes anteriores. El acumulado se actualiza al cerrar nóminas o modificar históricos.
+
+Para verlo aquí, detén Node.js con **Ctrl+C** y reinícialo en la misma terminal:
+
+```powershell
+npm.cmd start
+```
+
+Recarga el navegador con **Ctrl+F5** y entra en **Aguinaldo → Registrar salario histórico**. Ahí ingresas el total bruto real de cada mes anterior.
+
+Pasaron **13 pruebas de cálculo, 18 de integración, navegador y restauración de respaldo**. La migración está aplicada aquí; **producción sigue sin cambios**. Este cambio aún no tiene commit.
+
+Todo quedó registrado en `conversacion.md` y `proyecto.md`.
+
+## 102 — Usuario: contexto de página
+
+```text
+<external_codex_apps_open_page>{"page_id":null}</external_codex_apps_open_page>
+```
+
+## 103 — Usuario
+
+porque razon si Octubre ya esta ingresado para un empleado con sus salarios, en aguinaldo me sale esto: "
+
+| octubre de 2026 | ₡0,00 | 1.ª quincena: periodo posterior al corte, no suma | 2.ª quincena: periodo posterior al corte, no suma |   |
+| --------------- | ----- | ------------------------------------------------- | ------------------------------------------------- | - |
+
+"?
+
+## 104 — Asistente: actualización de progreso
+
+Voy a revisar cómo se aplica la fecha de corte del aguinaldo y por qué está dejando fuera las quincenas de octubre que ya ingresaste.
+
+## 105 — Asistente
+
+Porque programé el aguinaldo para sumar únicamente **nóminas cerradas cuyo periodo ya terminó**, con corte en la fecha actual.
+
+Hoy es **12 de octubre de 2026**, y los periodos terminan:
+
+- **Primera quincena:** 15 de octubre.
+- **Segunda quincena:** 31 de octubre.
+
+Por eso ambas quedan fuera del cálculo, aunque ya hayas ingresado los salarios y cerrado esas nóminas. **El ₡0,00 corresponde al importe incluido en el acumulado; no significa que el salario guardado sea cero.**
+
+Ese filtro por fecha fue una decisión mía de implementación. Para que los salarios definitivos que ya registraste sumen de inmediato, podemos usar **el cierre de la nómina** como criterio: las quincenas cerradas del ciclo sumarían y los borradores seguirían excluidos.
+
+## 106 — Usuario
+
+ok no, solo queria entender porque pasaba eso, pero entonces dejalo asi
+
+## 107 — Asistente: actualización de progreso
+
+Dejaré registrada tu confirmación de mantener el cálculo tal como está.
+
+## 108 — Asistente
+
+De acuerdo, queda como está: **solo suman las nóminas cerradas cuyo periodo ya terminó al corte**. Guardé tu confirmación en la memoria del proyecto.
+
+## 109 — Usuario
+
+ok entonces ahora dejemos listo el commit para subir esto del aguinaldo a git
+
+## 110 — Asistente: actualización de progreso
+
+Voy a revisar los cambios del aguinaldo y crear el commit con sus pruebas y la documentación actualizada.
+
+## 111 — Asistente
+
+Listo, creé el commit en **main**:
+
+`Agregar aguinaldo e historial salarial mensual`
+
+Incluye la funcionalidad, la migración, las pruebas y los documentos de memoria. Para subirlo al repositorio remoto, ejecuta desde esta carpeta:
+
+```powershell
+git push
+```
+
+La base de datos y las credenciales quedan fuera del commit.

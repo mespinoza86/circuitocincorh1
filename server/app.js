@@ -8,6 +8,7 @@ import { transaction, audit } from './db.js';
 import { installAuth, adminOnly, passwordHash, publicUser } from './auth.js';
 import { payslipPdf } from './pdf.js';
 import { nextEmployeeCode, rememberEmployeeCode } from './employee-codes.js';
+import {currentAguinaldoYear,aguinaldoPeriod,aguinaldoReport} from './aguinaldo.js';
 
 const first = async (client, query, values = [], label = 'Registro') => {
   const result = await client.query(query, values);
@@ -71,6 +72,8 @@ async function validateVacation(client, body) {
   return { employee, ...count, before, after };
 }
 async function savePayrollItem(client, actor, period, employee, inputs, existing = null) {
+  await client.query('SELECT pg_advisory_xact_lock(74210619)');
+  if((await client.query('SELECT 1 FROM salary_history WHERE employee_id=$1 AND year=$2 AND month=$3 AND active',[employee.id,period.year,period.month])).rowCount)throw new AppError(`El mes ya tiene un salario histórico para ${employee.full_name}. Retire ese histórico antes de registrar la nómina del mismo mes.`,409,'SALARY_HISTORY_OVERLAP');
   const amounts = payrollAmounts(employee.monthly_salary_cents, inputs, period.half);
   const partial = employee.hire_date > period.start_date || (employee.termination_date && employee.termination_date < period.end_date);
   if (partial && inputs.reviewed && !amounts.adjustment_reason) throw new AppError('El trabajador ingresó o salió durante la quincena. Registre el motivo del salario revisado para este periodo.');
@@ -208,6 +211,46 @@ export function createApp(pool) {
       await audit(client,req.user.id,'eliminar','feriado',before.id,before);
     });res.json({ ok:true });
   });
+  app.get('/api/aguinaldo',async (req,res)=> {
+    const period=aguinaldoPeriod(req.query.year||currentAguinaldoYear());
+    const report=await transaction(pool,async client=> {
+      await client.query('SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY');
+      const employees=(await client.query('SELECT * FROM employees ORDER BY full_name')).rows;
+      const payroll=(await client.query('SELECT i.id,i.employee_id,i.gross_cents,p.id AS period_id,p.year,p.month,p.half,p.status,p.start_date,p.end_date FROM payroll_items i JOIN payroll_periods p ON p.id=i.period_id WHERE p.start_date >= $1 AND p.end_date <= $2',[period.start,period.end])).rows;
+      const history=(await client.query('SELECT * FROM salary_history WHERE (year=$1 AND month=12) OR (year=$2 AND month<=11)',[period.year-1,period.year])).rows;
+      return aguinaldoReport(employees,payroll,history,period);
+    });res.json(report);
+  });
+  async function saveSalaryHistory(req,id) {
+    const dates=payPeriod(req.body.year,req.body.month,2);
+    if(dates.end>todayCR())throw new AppError('El salario histórico debe corresponder a un mes terminado, no al mes en curso o futuro.');
+    const gross=money(req.body.gross,'Salario bruto histórico'),note=text(req.body.note,'Motivo o referencia',{max:1000});
+    return transaction(pool,async client=> {
+      await client.query('SELECT pg_advisory_xact_lock(74210619)');
+      const before=id?await first(client,'SELECT * FROM salary_history WHERE id=$1 FOR UPDATE',[id],'Salario histórico'):null;
+      if(before&&Number(req.body.revision)!==before.revision)throw new AppError('El salario histórico fue actualizado por otro administrador. Recargue el detalle.',409);
+      const employeeId=before?before.employee_id:req.body.employee_id;
+      if(before&&(before.year!==dates.year||before.month!==dates.month))throw new AppError('Para cambiar el mes, retire el registro y agregue otro.');
+      const employee=await first(client,'SELECT * FROM employees WHERE id=$1 FOR SHARE',[employeeId],'Empleado');
+      const start=payPeriod(dates.year,dates.month,1).start;
+      if(employee.hire_date>dates.end||(employee.termination_date&&employee.termination_date<start))throw new AppError('Ese mes no corresponde a la relación laboral del empleado.');
+      if((await client.query('SELECT 1 FROM payroll_items i JOIN payroll_periods p ON p.id=i.period_id WHERE i.employee_id=$1 AND p.year=$2 AND p.month=$3',[employeeId,dates.year,dates.month])).rowCount)throw new AppError('Este mes ya tiene nómina registrada para el empleado. Complete sus quincenas en Nómina; no agregue un total histórico encima.',409,'PAYROLL_OVERLAP');
+      const after=before?await first(client,'UPDATE salary_history SET gross_cents=$1,note=$2,active=true,revision=revision+1,updated_by=$3,updated_at=now() WHERE id=$4 RETURNING *',[gross,note,req.user.id,id]):await first(client,'INSERT INTO salary_history(id,employee_id,year,month,gross_cents,note,updated_by) VALUES($1,$2,$3,$4,$5,$6,$7) RETURNING *',[randomUUID(),employeeId,dates.year,dates.month,gross,note,req.user.id]);
+      await audit(client,req.user.id,before?'editar':'crear','salario_historico',after.id,before,after);return after;
+    });
+  }
+  app.post('/api/salary-history',async(req,res)=>res.status(201).json(await saveSalaryHistory(req)));
+  app.put('/api/salary-history/:id',async(req,res)=>res.json(await saveSalaryHistory(req,req.params.id)));
+  app.post('/api/salary-history/:id/cancel',async(req,res)=> {
+    const reason=text(req.body.reason,'Motivo del retiro',{max:1000});
+    const result=await transaction(pool,async client=> {
+      await client.query('SELECT pg_advisory_xact_lock(74210619)');
+      const before=await first(client,'SELECT * FROM salary_history WHERE id=$1 FOR UPDATE',[req.params.id],'Salario histórico');
+      if(!before.active||Number(req.body.revision)!==before.revision)throw new AppError('El salario histórico cambió o ya fue retirado. Recargue el detalle.',409);
+      const after=await first(client,'UPDATE salary_history SET active=false,revision=revision+1,updated_by=$1,updated_at=now() WHERE id=$2 RETURNING *',[req.user.id,before.id]);
+      await audit(client,req.user.id,'retirar','salario_historico',after.id,before,{...after,reason});return after;
+    });res.json(result);
+  });
   app.post('/api/payroll',async (req,res) => {
     const dates=payPeriod(req.body.year,req.body.month,req.body.half);
     const period=await transaction(pool,async client=> {
@@ -226,6 +269,7 @@ export function createApp(pool) {
   });
   app.put('/api/payroll/:periodId/items/:id',async (req,res) => {
     const result=await transaction(pool,async client=> {
+      await client.query('SELECT pg_advisory_xact_lock(74210619)');
       const period=await first(client,'SELECT * FROM payroll_periods WHERE id=$1 FOR UPDATE',[req.params.periodId],'Periodo');
       if (period.status!=='draft') throw new AppError('La nómina está cerrada. Sus importes no se pueden modificar.',409);
       const item=await first(client,'SELECT * FROM payroll_items WHERE id=$1 AND period_id=$2 FOR UPDATE',[req.params.id,period.id],'Detalle');
@@ -253,6 +297,7 @@ export function createApp(pool) {
   });
   app.post('/api/payroll/:id/sync',async (req,res) => {
     await transaction(pool,async client=> {
+      await client.query('SELECT pg_advisory_xact_lock(74210619)');
       const period=await first(client,'SELECT * FROM payroll_periods WHERE id=$1 FOR UPDATE',[req.params.id],'Periodo');
       if (period.status!=='draft') throw new AppError('Solo se puede actualizar la plantilla de un borrador.',409);
       const employees=(await client.query('SELECT * FROM employees WHERE hire_date <= $1 AND (termination_date IS NULL OR termination_date >= $2) FOR SHARE',[period.end_date,period.start_date])).rows;
