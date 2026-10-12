@@ -1,0 +1,33 @@
+{
+  "name": "circuito-rrhh",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "start": "node --env-file-if-exists=.env server/index.js",
+    "dev": "node --env-file-if-exists=.env --watch server/index.js",
+    "setup:local": "node scripts/local-postgres.js setup",
+    "db:start": "node scripts/local-postgres.js start",
+    "db:stop": "node scripts/local-postgres.js stop",
+    "db:migrate": "node --env-file-if-exists=.env scripts/migrate.js",
+    "backup": "node --env-file-if-exists=.env scripts/backup.js",
+    "test": "node --test tests/domain.test.js",
+    "test:integration": "node --env-file-if-exists=.env --test --test-concurrency=1 tests/integration.test.js tests/employee-codes.test.js",
+    "test:backup": "node --env-file-if-exists=.env --test tests/backup.test.js",
+    "test:browser": "node --env-file-if-exists=.env tests/browser.js"
+  },
+  "dependencies": {
+    "express": "^5.1.0",
+    "express-rate-limit": "^8.0.0",
+    "helmet": "^8.1.0",
+    "nodemailer": "^10.1.0",
+    "pdfkit": "^0.17.2",
+    "pg": "^8.16.0"
+  },
+  "devDependencies": {
+    "playwright": "^1.56.0"
+  }
+}

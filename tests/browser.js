@@ -1,0 +1,96 @@
+import {chromium} from 'playwright';
+import {existsSync,mkdirSync,readdirSync} from 'node:fs';
+import {join,resolve} from 'node:path';
+import assert from 'node:assert/strict';
+import {testServer,admin,employee} from './helpers.js';
+import {todayCR} from '../server/domain.js';
+
+const resultDirectory=resolve('test-results');mkdirSync(resultDirectory,{recursive:true});
+const instance=await testServer();
+let browser;
+const errors=[];
+let expectedConflict=false;
+try {
+  const cache=join(process.env.LOCALAPPDATA||'','ms-playwright');
+  const cached=existsSync(cache)?readdirSync(cache).filter(x=>/^chromium-\d+$/.test(x)).sort().reverse().map(x=>join(cache,x,'chrome-win64','chrome.exe')).find(existsSync):null;
+  const executable=process.env.BROWSER_PATH||cached||'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe';
+  browser=await chromium.launch({executablePath:executable,headless:true});
+  const context=await browser.newContext({viewport:{width:1440,height:1000},locale:'es-CR'});
+  const page=await context.newPage();page.on('pageerror',e=>errors.push(e.message));page.on('console',msg=>{if(msg.type()==='error' && !(expectedConflict && /status of 409/.test(msg.text())))errors.push(msg.text());});
+  await page.goto(instance.base);
+  await page.getByRole('heading',{name:'Crea tu espacio de trabajo.'}).waitFor();
+  await page.evaluate(()=>document.fonts.ready);
+  assert.equal(await page.locator('.auth-story .brand img').evaluate(img=>img.complete&&img.naturalWidth>0),true);
+  await page.screenshot({path:join(resultDirectory,'auth-desktop.png'),fullPage:true});
+  await page.setViewportSize({width:390,height:844});
+  assert.equal(await page.locator('.auth-mobile-brand img').isVisible(),true);
+  assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>window.innerWidth),false);
+  await page.screenshot({path:join(resultDirectory,'auth-mobile.png'),fullPage:true});
+  await page.setViewportSize({width:1440,height:1000});
+  await page.getByLabel('Nombre de la empresa').fill('Circuito · Empresa de prueba');
+  await page.getByLabel('Tu nombre').fill(admin.name);
+  await page.getByLabel('Correo electrónico',{exact:true}).fill(admin.email);
+  await page.getByLabel('Contraseña de administrador').fill(admin.password);
+  await page.getByLabel('Confirma tu contraseña').fill(admin.password);
+  await page.getByRole('button',{name:'Crear empresa y administrador'}).click();
+  await page.getByRole('heading',{name:'Todo tu equipo, en un vistazo.'}).waitFor();
+  await page.getByRole('button',{name:'Nuevo empleado',exact:true}).click();
+  await page.getByLabel('Código interno',{exact:true}).waitFor();
+  assert.equal(await page.getByLabel('Código interno',{exact:true}).inputValue(),'CC0001');
+  const e=employee({code:'CC0001',full_name:'Lucía Morales (prueba)',monthly_salary:'950000',historical_days:70,historical_cutoff:todayCR(),historical_note:'Saldo histórico de prueba'});
+  for(const [label,key] of [['Nombre completo','full_name'],['Código interno','code'],['Cédula','national_id'],['Correo electrónico','email'],['Teléfono','phone'],['Fecha de nacimiento','birth_date'],['Fecha de ingreso','hire_date'],['Puesto','position'],['Departamento','department'],['Salario base mensual (₡)','monthly_salary'],['Días históricos a descontar','historical_days'],['Fecha de corte','historical_cutoff'],['Motivo o referencia del ajuste histórico','historical_note']])await page.getByLabel(label,{exact:true}).fill(String(e[key]));
+  await page.getByRole('button',{name:'Crear empleado',exact:true}).click();await page.locator('#modal').waitFor({state:'hidden'});
+  const csrf=await page.evaluate(async()=> (await (await fetch('/api/auth/status')).json()).csrf);
+  for(const [i,name,salary,historical] of [[2,'Diego Vargas (prueba)','1100000',65],[3,'Valeria Solís (prueba)','850000',50],[4,'Andrés Castro (prueba)','1200000',100]]) {
+    const r=await context.request.post(instance.base+'/api/employees',{headers:{'X-CSRF-Token':csrf},data:employee({code:`EMP-00${i}`,national_id:`${i}-2222-3333`,full_name:name,monthly_salary:salary,historical_days:historical,historical_cutoff:todayCR(),historical_note:'Prueba automatizada'})});assert.equal(r.status(),201);
+  }
+  await page.reload();await page.getByRole('heading',{name:'Todo tu equipo, en un vistazo.'}).waitFor();
+  await page.screenshot({path:join(resultDirectory,'dashboard.png'),fullPage:true});
+  console.log('✓ Configuración inicial, perfil de empleado y resumen.');
+  await page.getByRole('button',{name:'Empleados',exact:false}).first().click();
+  await page.getByRole('heading',{name:'Tu equipo',exact:true}).waitFor();await page.getByLabel('Buscar empleados').fill('Lucía');assert.equal(await page.locator('#employee-table tbody tr').count(),1);
+  await page.getByLabel('Buscar empleados').fill('');assert.equal(await page.locator('#employee-table tbody tr').count(),4);
+  await page.getByRole('button',{name:'Nuevo empleado',exact:true}).click();
+  await page.getByLabel('Código interno',{exact:true}).waitFor();
+  assert.equal(await page.getByLabel('Código interno',{exact:true}).inputValue(),'CC0002');
+  await page.getByLabel('Código interno',{exact:true}).fill('PERSONAL-EDITADO');
+  assert.equal(await page.getByLabel('Código interno',{exact:true}).inputValue(),'PERSONAL-EDITADO');
+  await page.getByRole('button',{name:'Cancelar',exact:true}).click();
+  await page.getByRole('button',{name:'Vacaciones',exact:true}).click();
+  await page.getByRole('heading',{name:'Tiempo para descansar'}).waitFor();
+  const data=await (await context.request.get(instance.base+'/api/bootstrap')).json();
+  const lucia=data.employees.find(x=>x.code==='CC0001');
+  const nextYear=Number(todayCR().slice(0,4))+1;
+  let day=4;while([0,6].includes(new Date(`${nextYear}-01-${String(day).padStart(2,'0')}T12:00:00Z`).getUTCDay()))day++;
+  const work=`${nextYear}-01-${String(day).padStart(2,'0')}`;
+  await page.getByRole('button',{name:'Registrar vacaciones',exact:true}).click();
+  await page.getByLabel('Trabajador',{exact:true}).selectOption(lucia.id);await page.getByLabel('Duración').selectOption('true');
+  await page.getByLabel('Desde (incluido)').fill(work);await page.getByLabel('Hasta (incluido)').fill(work);
+  await page.getByRole('button',{name:'Calcular días y revisar saldo'}).click();await page.locator('#vacation-preview .preview-card').waitFor();
+  assert.match(await page.locator('#vacation-preview').innerText(),/0,5 días/);
+  await page.getByRole('button',{name:'Aprobar vacaciones'}).click();await page.locator('#modal').waitFor({state:'hidden'});
+  await page.getByRole('button',{name:'Registrar vacaciones',exact:true}).click();await page.getByLabel('Trabajador',{exact:true}).selectOption(data.employees.find(x=>x.code==='EMP-004').id);
+  await page.getByLabel('Desde (incluido)').fill(work);await page.getByLabel('Hasta (incluido)').fill(work);await page.getByRole('button',{name:'Calcular días y revisar saldo'}).click();
+  await page.getByText('El trabajador quedará con saldo negativo.',{exact:true}).waitFor();
+  expectedConflict=true;
+  await page.getByRole('button',{name:'Aprobar vacaciones'}).click();await page.locator('.form-error').filter({hasText:'Confirme expresamente'}).waitFor();
+  expectedConflict=false;
+  await page.getByLabel('Confirmo el adelanto de vacaciones y el saldo negativo.').check();await page.getByRole('button',{name:'Aprobar vacaciones'}).click();await page.locator('#modal').waitFor({state:'hidden'});
+  console.log('✓ Búsqueda, medio día de vacaciones y confirmación del saldo negativo.');
+  await page.getByRole('button',{name:'Feriados',exact:true}).click();await page.getByRole('button',{name:'Agregar feriado',exact:true}).click();await page.getByLabel('Nombre del feriado').fill('Feriado de prueba');await page.getByLabel('Fecha exacta').fill(`${nextYear}-05-01`);await page.getByRole('button',{name:'Agregar feriado',exact:true}).last().click();await page.locator('#modal').waitFor({state:'hidden'});await page.getByText('Feriado de prueba',{exact:true}).waitFor();
+  await page.getByRole('button',{name:'Nómina',exact:true}).click();await page.getByRole('button',{name:'Nueva quincena',exact:true}).click();await page.getByLabel('Año',{exact:true}).fill(String(nextYear));await page.getByLabel('Mes',{exact:true}).selectOption('3');await page.getByLabel('Quincena',{exact:true}).selectOption('1');await page.getByRole('button',{name:'Crear borrador'}).click();await page.locator('#modal').waitFor({state:'hidden'});await page.getByText('Nómina en preparación.',{exact:true}).waitFor();
+  for(const name of data.employees.map(e=>e.full_name)) {
+    await page.getByRole('button',{name:`Revisar pago de ${name}`,exact:true}).click();await page.getByLabel('Comisiones (₡)').fill('20000');await page.getByLabel('Caja (₡)').fill('45000');await page.getByLabel('Renta (₡)').fill('5000');await page.getByLabel('Préstamos (₡)').fill('10000');await page.getByRole('button',{name:'Guardar como revisado'}).click();await page.locator('#modal').waitFor({state:'hidden'});
+  }
+  await page.getByRole('button',{name:'Cerrar nómina',exact:true}).click();await page.getByLabel('Confirmo que revisé los importes de todos los trabajadores.').check();await page.getByRole('button',{name:'Cerrar y conservar importes'}).click();await page.locator('#modal').waitFor({state:'hidden'});await page.getByText('Nómina cerrada.',{exact:true}).waitFor();
+  const pdfHref=await page.getByRole('link',{name:`Ver colilla de ${e.full_name}`,exact:true}).getAttribute('href');const pdf=await context.request.get(instance.base+pdfHref);assert.equal(pdf.status(),200);const pdfBytes=await pdf.body();assert.ok(pdfBytes.subarray(0,4).toString()==='%PDF');assert.ok(pdfBytes.includes(Buffer.from('/Subtype /Image')));
+  await page.screenshot({path:join(resultDirectory,'payroll.png'),fullPage:true});console.log('✓ Nómina manual, cierre y PDF autenticado.');
+  await page.getByRole('button',{name:'Reportes',exact:true}).click();await page.getByRole('heading',{name:'Información para decidir'}).waitFor();await page.getByRole('button',{name:'Exportar CSV',exact:true}).waitFor({state:'visible'});
+  const downloadPromise=page.waitForEvent('download');await page.getByRole('button',{name:'Exportar CSV',exact:true}).click();const download=await downloadPromise;assert.match(download.suggestedFilename(),/^vacaciones-/);
+  await page.getByRole('button',{name:'Configuración',exact:true}).click();await page.getByRole('heading',{name:'Tu espacio de trabajo'}).waitFor();assert.ok(await page.getByText('Historial de cambios',{exact:true}).isVisible());
+  await page.setViewportSize({width:390,height:844});await page.getByRole('button',{name:'Abrir menú'}).click();await page.getByRole('button',{name:'Resumen',exact:true}).click();await page.getByRole('heading',{name:'Todo tu equipo, en un vistazo.'}).waitFor();
+  assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>window.innerWidth),false);
+  await page.screenshot({path:join(resultDirectory,'mobile.png'),fullPage:true});console.log('✓ Reportes, exportación CSV, historial y vista móvil sin desbordamiento.');
+  assert.deepEqual(errors,[]);console.log('✓ Sin errores de JavaScript ni de consola. Capturas en test-results/.');
+}catch(error){console.error(error);process.exitCode=1;}
+finally{if(browser)await browser.close();await instance.close();}
