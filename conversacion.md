@@ -1,6 +1,6 @@
 # Conversación del proyecto Circuito
 
-Historial iniciado el 2026-10-10 y continuado el 2026-10-11. Zona horaria: America/Costa_Rica.
+Historial iniciado el 2026-10-10 y continuado hasta el 2026-10-12. Zona horaria: America/Costa_Rica.
 
 Este archivo conserva, en orden, los mensajes del usuario y las respuestas visibles del asistente disponibles desde el inicio de esta conversación, incluidas las actualizaciones de progreso. Se preservan la redacción original, las preguntas, los acuerdos y las anotaciones. No se dispone de horas individuales para cada mensaje, por lo que se identifican por secuencia.
 
@@ -591,3 +591,363 @@ Para registrar **medio día de vacaciones**:
 En **Observación** puedes escribir “medio día por la mañana” o “medio día por la tarde”.
 
 La fecha debe ser laboral, no ser feriado y estar después del corte histórico de ese trabajador, si tiene uno.
+
+## 59 — Usuario
+
+ok listo, otra cosa, ya tengo el proyecto subido en git, pero debo correrlo en otra computadora, que debo instalar en esa computadora para que esto funcione? y la otra, como hago con la base de datos para correrla en esa otra computadora?
+
+## 60 — Asistente: actualización de progreso
+
+Voy a revisar las instrucciones y los scripts de instalación para indicarte qué necesitas en la otra computadora y cómo trasladar la base con los datos que ya tienes.
+
+## 61 — Asistente: pregunta de aclaración
+
+¿La otra computadora reemplazará a esta, o quieres usar ambas con los mismos datos actualizados?
+
+Opciones presentadas: “Trasladar y usar la otra computadora” y “Usar ambas con datos compartidos”.
+
+## 62 — Usuario: respuesta a la aclaración
+
+Usar ambas con datos compartidos
+
+## 63 — Asistente: actualización de progreso
+
+Entonces conviene tener una sola aplicación y una sola base de datos en una computadora que haga de servidor. La segunda entrará desde el navegador y verá los mismos datos; allí no necesitarías instalar Node.js ni PostgreSQL.
+
+Voy a comprobar cómo permitir ese acceso en la red local sin exponer PostgreSQL.
+
+## 64 — Asistente: pregunta de aclaración
+
+¿Las dos computadoras estarán conectadas a la misma red local de la empresa?
+
+Opciones presentadas: “Sí, misma red” y “No, ubicaciones diferentes”.
+
+## 65 — Usuario: respuesta a la aclaración
+
+No, ubicaciones diferentes
+
+## 66 — Asistente: actualización de progreso
+
+Como estarán en ubicaciones distintas, necesitan acceder a un servidor central por HTTPS o mediante una VPN privada. En ambos casos habrá una sola base de datos.
+
+Si esta computadora sigue siendo el servidor, la base puede quedarse donde está. Si elegimos otro servidor, trasladamos un respaldo una sola vez.
+
+Nota de registro: este turno fue interrumpido por el usuario antes de una respuesta final. No se implantó una solución de VPN o nube.
+
+## 67 — Usuario
+
+ok, hagamos una cosa, la base datos va a estar guardada en otra computadora, y esa sera el host, el servidor, los demas estara en la misma red, entonces solo explicame que debo hacer para llevar esto a la otra computadora, que debo inrstalar, esto esta en git, entonces que hago para jalar de alla esto, pero tambien necesito node, necesito sql, entonces dime todo lo que debo hacer para mover esto hacia alla.
+
+## 68 — Asistente: actualización de progreso
+
+Vamos a trasladar el código y un respaldo de PostgreSQL a la computadora que será el servidor. Revisaré los scripts para darte el orden exacto de instalación, restauración y acceso desde la red local.
+
+## 69 — Asistente: actualización de progreso
+
+Hay un detalle importante en el orden: después de `setup:local`, la base nueva está vacía y lista para recibir el respaldo. La restauración debe hacerse antes del primer arranque de la aplicación, porque ese arranque crea las tablas.
+
+También incluiré cómo abrir el puerto de la aplicación en Windows y cómo entrarán los demás equipos.
+
+## 70 — Asistente: actualización de progreso
+
+La guía ya está preparada: incluye qué instalar, cómo descargar el repositorio, qué contraseña usar al restaurar y cómo acceder desde los otros equipos. El respaldo conservará las cuentas, vacaciones, nóminas y el consecutivo de empleados.
+
+Solo estoy documentando los pasos; no he movido la base ni cambiado la configuración de la computadora que usas ahora.
+
+## 71 — Asistente
+
+Sí. **La nueva computadora tendrá el programa y PostgreSQL. Los demás equipos entrarán por el navegador.** Estos pasos son para **Windows**.
+
+El código se descarga de Git; los datos se trasladan mediante un respaldo.
+
+1. **Haz el respaldo en tu computadora actual.**
+
+   Detén la aplicación con **Ctrl+C** y, desde la carpeta del proyecto, ejecuta:
+
+   ```powershell
+   npm.cmd run db:start
+   npm.cmd run backup
+   ```
+
+   Copia el archivo `.dump` recién creado en `backups` a una memoria USB u otro medio protegido. Durante el traslado, deja de registrar cambios en la instalación antigua.
+
+2. **Instala estos programas en la computadora servidor:**
+
+   [Git para Windows](https://git-scm.com/install/windows), [Node.js 24 LTS](https://nodejs.org/en/download) —incluye npm— y [PostgreSQL 18](https://www.postgresql.org/download/windows/), con sus herramientas de línea de comandos. Mantén la ruta predeterminada de PostgreSQL: `C:\Program Files\PostgreSQL\18`.
+
+3. **Descarga el proyecto y prepara una base vacía.**
+
+   Abre PowerShell y sustituye `URL_DE_TU_REPOSITORIO` por la URL de tu repositorio:
+
+   ```powershell
+   cd "$env:USERPROFILE\Documents"
+   git clone "URL_DE_TU_REPOSITORIO" CircuitoDashboard
+   cd CircuitoDashboard
+   npm.cmd ci
+   npm.cmd run setup:local
+   ```
+
+   Esto instala las dependencias y genera la base y un `.env` nuevo.
+
+   **Todavía no ejecutes `npm start`, `Iniciar.cmd` ni `npm run db:migrate`: primero restauramos los datos.**
+
+4. **Restaura el respaldo.**
+
+   Dentro del proyecto nuevo, crea una carpeta `backups`, copia allí el `.dump` y renombra esa copia como `traslado.dump`.
+
+   Ejecuta este comando completo en PowerShell, desde la carpeta del proyecto:
+
+   ```powershell
+   & "C:\Program Files\PostgreSQL\18\bin\pg_restore.exe" --host=127.0.0.1 --port=55432 --username=circuito_app --dbname=circuito_rrhh --no-owner --no-privileges --single-transaction --password ".\backups\traslado.dump"
+   ```
+
+   Pedirá una contraseña. Usa la del **`.env` de la nueva computadora**: dentro de `DATABASE_URL`, es el texto entre `circuito_app:` y `@`. **No es tu contraseña de administrador de la aplicación.**
+
+   Este procedimiento restaura en una base vacía; no lo fuerces encima de una base que ya estés usando. [Referencia de pg_restore](https://www.postgresql.org/docs/18/app-pgrestore.html).
+
+   Si terminó sin errores, ejecuta:
+
+   ```powershell
+   npm.cmd run db:migrate
+   ```
+
+   Las cuentas restauradas conservarán sus contraseñas. **Mantén el `DATABASE_URL` nuevo**; si tenías correo SMTP configurado, traslada esos ajustes por separado.
+
+5. **Configura el acceso por la red.**
+
+   En el servidor ejecuta `ipconfig` y busca la dirección IPv4 de su conexión a la red.
+
+   Si fuera, **por ejemplo**, `192.168.1.50`, modifica estas líneas del `.env`:
+
+   ```dotenv
+   HOST=0.0.0.0
+   PORT=3001
+   APP_ORIGIN=http://192.168.1.50:3001
+   COOKIE_SECURE=false
+   TRUST_PROXY=false
+   ```
+
+   **Reemplaza esa IP por la real del servidor.** Conviene reservarla en el router para que permanezca estable.
+
+6. **Permite el acceso en el firewall de Windows.**
+
+   En el servidor, abre PowerShell **como administrador** y ejecuta esta regla restringida a la red local:
+
+   ```powershell
+   New-NetFirewallRule -DisplayName "Circuito RRHH LAN" -Direction Inbound -Protocol TCP -LocalPort 3001 -Action Allow -Profile Private,Domain -RemoteAddress LocalSubnet
+   ```
+
+   La conexión debe tener perfil **Privado** o de **Dominio**. PostgreSQL seguirá accesible únicamente dentro del servidor; no necesitas abrir su puerto 55432. [Referencia de Microsoft](https://learn.microsoft.com/en-us/powershell/module/netsecurity/new-netfirewallrule).
+
+7. **Inicia el programa en el servidor.**
+
+   Abre una terminal nueva, entra a la carpeta del proyecto y ejecuta:
+
+   ```powershell
+   npm.cmd run db:start
+   npm.cmd start
+   ```
+
+   Mantén la ventana abierta y el servidor encendido, sin suspensión. Por ahora, el arranque es manual.
+
+8. **Entra desde las otras computadoras.**
+
+   Abre el navegador y escribe la dirección del servidor, por ejemplo `http://192.168.1.50:3001`. Usa esa misma dirección también desde el propio servidor.
+
+   **Los otros equipos solo necesitan navegador.** Todos verán la misma base. Comprueba los empleados, vacaciones y nóminas anteriores antes de reanudar el trabajo.
+
+Esta configuración permite comprobar el funcionamiento por HTTP en la LAN. Para uso diario con contraseñas y nómina, queda configurar **HTTPS, arranque automático y respaldos programados**.
+
+También dejé los pasos en [TRASLADO_SERVIDOR.md](C:/Users/makin/Documents/proyectos_Marco/CircuitoDashboard/TRASLADO_SERVIDOR.md).
+
+### Continuación del 2026-10-12
+
+## 72 — Usuario
+
+Anotación adjunta: el usuario seleccionó “. Usa la” en la explicación anterior del traslado. La solicitud que acompaña la selección se transcribe debajo. Metadatos de la anotación:
+
+```json
+[{"text":". Usa la","source":{"messageId":"msg_003a96415ef6d925016acc4b7e9f8c819f92f7b44e03b9c3be","startOffset":1666,"endOffset":1675}}]
+```
+
+ok, mira una cosa, porque no se que tan delicado es lo que sigue, ya movi todo a la computadora nueva, y lo levante como me dijiste y esta corriendo, ahi se van a empezar a generar los empleados y a hacer todo lo que haya que hacer, pero quiero hacer unas mejoras que pronto de voy a decir, es posible que sigamos trabajando aqui con las mejoras, y una vez que las tengo poder moverlas a la otra computadora sin perder lo que se haya puesto en la base de datos? la verdad lo que tenga la base de datos de esta computadora no me interesa, esta es solo para validaciones, la que realmente importa es la otra
+
+## 73 — Asistente: actualización de progreso
+
+Voy a revisar cómo se aplican las migraciones y qué archivos quedan fuera de Git, para explicarte cómo actualizar el servidor conservando su base de datos. También dejaré registrado que esta computadora es de pruebas y que la base importante está en el otro equipo.
+
+## 74 — Asistente: actualización de progreso
+
+Sí, podemos trabajar así. Las actualizaciones llevarán el código y, cuando haga falta, cambios de estructura que conserven los registros existentes. La base de pruebas de esta computadora se quedará aquí.
+
+Ya comprobé que `.env`, `.local` y los respaldos no están versionados en este repositorio. Dejaré documentado que la otra computadora es producción y que no debemos volver a restaurar allí la base de pruebas.
+
+## 75 — Asistente
+
+Sí, **podemos seguir desarrollando aquí y actualizar el servidor conservando sus datos**. :codex-annotation{index="1"}
+
+Queda establecido:
+
+- **Esta computadora:** desarrollo y pruebas.
+- **La otra computadora:** producción; su base contiene la información oficial de la empresa.
+
+Trabajaremos y probaremos las mejoras aquí. Después subiremos al repositorio el código validado y el servidor descargará esa versión. **La base de pruebas no se copiará al servidor.**
+
+Si una mejora necesita un campo o una tabla nueva, prepararemos una **migración**: un cambio de estructura probado con registros existentes. Por ejemplo, agregar otro teléfono debe conservar los empleados que ya están registrados. Cambios más complejos necesitan revisar también su efecto sobre saldos y nóminas.
+
+Para actualizar el servidor, detendremos Node.js con **Ctrl+C**, dejando PostgreSQL activo. Desde su carpeta del proyecto se ejecutarían, **uno por uno y continuando solo si no hubo errores**:
+
+```powershell
+npm.cmd run backup
+git pull --ff-only
+npm.cmd ci
+npm.cmd run db:migrate
+npm.cmd start
+```
+
+El respaldo se hace antes de actualizar. `git pull --ff-only` evita integrar cambios si las historias de Git divergen. [Documentación de Git](https://git-scm.com/docs/git-pull).
+
+El programa ya registra las migraciones aplicadas y ejecuta solamente las nuevas. Aun así, **la conservación de datos depende de diseñarlas y probarlas correctamente**, además de tener un respaldo.
+
+**No repetiremos la restauración inicial del `.dump`, ni reemplazaremos el `.env` o la carpeta `.local` del servidor con los de esta computadora.**
+
+Dejé este acuerdo en `AGENTS.md` y `proyecto.md`, y el procedimiento en [ACTUALIZACIONES.md](C:/Users/makin/Documents/proyectos_Marco/CircuitoDashboard/ACTUALIZACIONES.md).
+
+## 76 — Usuario
+
+listo, entonces el primer cambio que quiero es este: "1) para la nomina, agregar un boton para enviar la colilla de pago directamente al correo del empleado. ", ya tenemos un boton para generar la colilla como pdf, pero quiero que en esa misma pagina de nomina, agreguemos tambien a la par del donde se ve el pdf, se tenga uno para enviar eso mismo al email del empleado, el email esta en la base de datos y en los datos del empleado, entonces seria enviarlo a ese.
+
+## 77 — Asistente: actualización de progreso
+
+Voy a revisar el envío de colillas que ya tiene la aplicación y dejar el botón visible junto al PDF en la nómina, usando el correo del empleado. Probaré el envío con un servidor de correo simulado y guardaré los cambios y los pasos de actualización.
+
+## 78 — Asistente: pregunta de aclaración
+
+¿Desde qué dirección y proveedor de correo se enviarán las colillas (por ejemplo, Gmail, Microsoft 365 o el correo corporativo de Circuito Cinco)? No compartas la contraseña aquí.
+
+## 79 — Usuario: respuesta a la pregunta
+
+se enviara desde el de circuito que es contabilidad@circuitocinco.com
+
+## 80 — Asistente: actualización de progreso
+
+El remitente será **contabilidad@circuitocinco.com**. Encontré que el botón de correo solo aparecía en nóminas cerradas y quedaba deshabilitado sin SMTP configurado. Lo haré visible junto al PDF y mostraré el destinatario antes de confirmar.
+
+El envío seguirá requiriendo cerrar la nómina, para que la colilla corresponda a importes definitivos.
+
+## 81 — Asistente: pregunta de aclaración
+
+Los registros públicos del dominio apuntan a Google. ¿contabilidad@circuitocinco.com se usa desde Gmail/Google Workspace?
+
+Opciones presentadas: «Sí, Gmail / Google Workspace» y «No, otro proveedor».
+
+## 82 — Usuario: instrucciones del proyecto y contexto del entorno
+
+```text
+# AGENTS.md instructions for C:\Users\makin\Documents\proyectos_Marco\CircuitoDashboard
+
+<INSTRUCTIONS>
+# Continuidad del proyecto
+
+Estas instrucciones responden a la petición del usuario de conservar la conversación y el contexto del trabajo entre sesiones.
+
+## Antes de trabajar
+
+1. Leer `proyecto.md` completo para conocer el estado, las reglas acordadas, las verificaciones y los pendientes.
+2. Leer `conversacion.md` para recuperar las solicitudes del usuario y las respuestas visibles del asistente. Si crece demasiado para una lectura, recorrerlo por partes, conservando el orden; no asumir que solo el último mensaje representa todo el alcance.
+3. Consultar `README.md` y los archivos afectados antes de implementar. Verificar el estado real cuando importe: la memoria documentada describe la última comprobación, no garantiza que los procesos o datos sigan iguales.
+
+## Mantener la memoria
+
+- Agregar a `conversacion.md` cada nuevo mensaje del usuario y cada respuesta visible del asistente, incluidas las actualizaciones de progreso y la respuesta final. Mantener el texto original y el orden; no sustituir mensajes antiguos por resúmenes. Si hay anotaciones, conservar su selección y comentario.
+- Antes de cerrar cada turno, guardar también la respuesta final que se va a entregar, para que el archivo incluya el cierre de ese turno.
+- Actualizar `proyecto.md` durante el trabajo y antes del cierre: decisiones, cambios concretos, archivos afectados, comandos y resultados relevantes, pruebas ejecutadas, límites, pendientes y próximo punto de continuación.
+- Mantener un resumen de estado al comienzo y una bitácora acumulativa al final de `proyecto.md`. No borrar el historial para actualizar el resumen.
+- Distinguir requisitos confirmados por el usuario, decisiones de implementación y propuestas pendientes. No presentar una propuesta como funcionalidad terminada.
+- Registrar errores relevantes y su resolución. Si queda un bloqueo, indicar qué se intentó, qué se conoce y qué falta.
+- No inventar mensajes, fechas precisas, resultados de pruebas o estados de la base de datos. Identificar cualquier parte que no esté disponible en el contexto.
+- No copiar contraseñas, tokens, cookies, conexiones con contraseña ni contenido de `.env` a estos documentos. Si el usuario comunica una credencial, conservar el resto del mensaje y sustituir el secreto por `[CREDENCIAL OMITIDA]`, dejando constancia de la omisión.
+- Escribir Markdown en español y UTF-8, preservando tildes y caracteres.
+
+## Alcance y operación
+
+- El proyecto es local, para una empresa de Costa Rica. No publicar ni desplegar en servicios externos por inferencia.
+- La configuración PostgreSQL del proyecto está separada del servicio PostgreSQL existente. No modificar ese servicio ni otras bases.
+- Los datos de la empresa están en PostgreSQL; los documentos de memoria no reemplazan respaldos.
+- Ante instrucciones nuevas del usuario, actualizar las decisiones y continuar con el alcance autorizado.
+- No crear subagentes salvo petición expresa del usuario o instrucciones aplicables que lo requieran.
+
+</INSTRUCTIONS><environment_context>
+  <cwd>C:\Users\makin\Documents\proyectos_Marco\CircuitoDashboard</cwd>
+  <shell>powershell</shell>
+  <current_date>2026-10-12</current_date>
+  <timezone>America/Costa_Rica</timezone>
+  <filesystem><workspace_roots><root>C:\Users\makin\Documents\proyectos_Marco\CircuitoDashboard</root></workspace_roots><permission_profile type="disabled"><file_system type="unrestricted" /></permission_profile></filesystem>
+</environment_context>
+```
+
+## 83 — Usuario: respuesta a la pregunta
+
+Sí, Gmail / Google Workspace
+
+## 84 — Asistente: actualización de progreso
+
+Confirmado: usaremos **contabilidad@circuitocinco.com** mediante Google Workspace. El destinatario será el correo actual del perfil del empleado, incluso si se corrigió después de cerrar la nómina; el PDF conservará los importes originales.
+
+El cambio no requiere una migración de la base de datos. Para activar los envíos reales faltará configurar la credencial de correo en el servidor.
+
+## 85 — Asistente: actualización de progreso
+
+Las pruebas del servidor pasaron: el envío usa el correo actual del empleado, adjunta el PDF y controla duplicados, reenvíos y errores. Ahora comprobaré el botón en el navegador y dejaré una guía para configurar Google Workspace en el servidor.
+
+## 86 — Asistente: actualización de progreso
+
+El botón también pasó la prueba en el navegador, tanto en escritorio como en móvil. Está junto al PDF, muestra el destinatario antes de enviar y pide confirmación para reenviar. Las pruebas usaron correo simulado; falta configurar la credencial de Google Workspace para hacer envíos reales.
+
+## 87 — Asistente
+
+Ya quedó implementado aquí el botón **Enviar correo**, junto al **PDF** de cada trabajador en Nómina.
+
+- Muestra el remitente y el correo actual del empleado antes de confirmar.
+- Adjunta la misma colilla PDF y exige que la nómina esté cerrada.
+- Registra el resultado y pide confirmación para reenviar.
+
+Pasaron las **17 pruebas de integración** y las pruebas del navegador, incluido móvil. Se usó correo simulado; todavía no se enviaron mensajes reales.
+
+Para activarlo con **contabilidad@circuitocinco.com**, falta configurar la credencial en el `.env` del servidor. Google permite contraseñas de aplicación con verificación en dos pasos cuando las políticas de la cuenta lo admiten. [Ayuda de Google](https://support.google.com/accounts/answer/185833?hl=es). **No compartas esa contraseña aquí.**
+
+Dejé los pasos en [CORREO_COLILLAS.md](C:/Users/makin/Documents/proyectos_Marco/CircuitoDashboard/CORREO_COLILLAS.md). Esta mejora **no requiere cambios de estructura de la base de datos** y aún no se ha llevado al servidor de producción.
+
+También guardé todo en `conversacion.md` y `proyecto.md`.
+
+## 88 — Usuario: contexto de página
+
+```text
+<external_codex_apps_open_page>{"page_id":null}</external_codex_apps_open_page>
+```
+
+## 89 — Usuario
+
+ok, hagamos commit con este cambio para que este al dia en git
+
+## 90 — Asistente: actualización de progreso
+
+Voy a revisar los archivos modificados y crear el commit con la mejora de correo y la documentación pendiente.
+
+## 91 — Asistente: actualización de progreso
+
+El commit incluirá la mejora de correo, sus pruebas y las guías de configuración y actualización del servidor. Verifiqué que la base de datos, `.env` y los respaldos quedan fuera de Git.
+
+## 92 — Asistente
+
+Listo, creé el commit en **main**:
+
+`Agregar envio de colillas por correo desde nomina`
+
+Incluye el botón, las pruebas y la documentación actualizada, con `conversacion.md` y `proyecto.md`.
+
+El commit está **guardado localmente**. Para subirlo al repositorio remoto, ejecuta desde esta carpeta:
+
+```powershell
+git push
+```

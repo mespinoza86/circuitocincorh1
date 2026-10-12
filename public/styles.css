@@ -296,5 +296,16 @@ th,td{font-size:10px;padding:9px}
 @media(prefers-reduced-motion:reduce){*,*:before,*:after{scroll-behavior:auto!important;transition:none!important;animation:none!important}}
 
 .mobile-header-logo{display:none}
+.payroll-actions{flex-wrap:nowrap;gap:6px}
+.payroll-actions .btn{min-height:34px}
+.email-address{display:grid;grid-template-columns:42px 1fr;gap:10px;padding:9px 0;font-size:12px;border-bottom:1px solid var(--line)}
+.email-address span{color:var(--muted)}
+.email-address strong{font-weight:500;overflow-wrap:anywhere;min-width:0}
+.email-attachment{display:flex;gap:12px;align-items:center;border:1px solid var(--line);border-radius:8px;padding:15px}
+.email-attachment>svg{color:var(--brand);width:25px;height:25px}
+.email-attachment>div{flex:1;min-width:0}
+.email-attachment strong{display:block;font-size:12px;font-weight:600}
+.email-attachment small{display:block;color:var(--muted);font-size:10px;margin-top:5px}
+@media(max-width:480px){.email-attachment{flex-wrap:wrap}.email-attachment .btn{margin-left:37px}.email-address{grid-template-columns:33px 1fr}}
 @media(max-width:800px){.mobile-header-logo{display:block;width:135px;height:auto}.topbar .breadcrumb{display:none}}
 @media(max-width:480px){.profile>div{display:none}.topbar .profile{border:0;padding:0}.mobile-header-logo{width:130px}}

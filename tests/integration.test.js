@@ -77,15 +77,25 @@ test('flujo real PostgreSQL: permisos, perfiles, vacaciones, nómina, PDF y cuen
     const updated=await request(`/employees/${e.id}`,{method:'PUT',body:employee({monthly_salary:'2000000',full_name:'Nombre Actualizado',revision:e.revision})});assert.equal(updated.status,200);
     const preserved=(await request(`/payroll/${period.id}`)).data.items.find(i=>i.id===item.id);assert.equal(preserved.employee_snapshot.full_name,'Persona de Prueba');assert.equal(Number(preserved.monthly_salary_cents),100000000);assert.equal(Number(preserved.net_cents),45400000);
   });
-  await t.test('correo requiere SMTP y destinatario de la colilla; envío local verificable',async()=> {
-    const env={host:process.env.SMTP_HOST,from:process.env.SMTP_FROM,port:process.env.SMTP_PORT,user:process.env.SMTP_USER,secure:process.env.SMTP_SECURE};
+  await t.test('correo usa el perfil vigente, adjunta PDF y controla duplicados, reenvíos y fallos',async()=> {
+    const env={host:process.env.SMTP_HOST,from:process.env.SMTP_FROM,port:process.env.SMTP_PORT,user:process.env.SMTP_USER,pass:process.env.SMTP_PASS,secure:process.env.SMTP_SECURE};
     process.env.SMTP_HOST='';assert.equal((await request(`/payslips/${item.id}/email`,{method:'POST',body:{recipient:'persona@example.test'}})).status,503);
-    const messages=[];
+    process.env.SMTP_HOST='smtp.gmail.com';process.env.SMTP_FROM='contabilidad@circuitocinco.com';process.env.SMTP_USER='contabilidad@circuitocinco.com';process.env.SMTP_PASS='';
+    assert.equal((await request('/bootstrap')).data.smtp_configured,false);
+    assert.equal((await request(`/payslips/${item.id}/email`,{method:'POST',body:{recipient:'persona@example.test'}})).status,503);
+    const current=(await request('/bootstrap')).data.employees.find(x=>x.id===e.id);
+    const changed=await request(`/employees/${e.id}`,{method:'PUT',body:{...current,monthly_salary:String(Number(current.monthly_salary_cents)/100),email:'persona.actual@example.test'}});assert.equal(changed.status,200);
+    const updated=(await request(`/payroll/${period.id}`)).data.items.find(x=>x.id===item.id);
+    assert.equal(updated.recipient_email,'persona.actual@example.test');
+    assert.equal(updated.employee_snapshot.email,'persona@example.test');
+    assert.equal(Number(updated.net_cents),Number(item.net_cents));
+    const messages=[];let rejectDelivery=false;
     const smtp=net.createServer(socket=> {
       socket.setEncoding('utf8');socket.write('220 localhost test SMTP\r\n');let buffer='',reading=false,message='';
       socket.on('data',chunk=>{buffer+=chunk;let index;while((index=buffer.indexOf('\r\n'))>=0){const line=buffer.slice(0,index);buffer=buffer.slice(index+2);
         if(reading){if(line==='.'){reading=false;messages.push(message);socket.write('250 accepted\r\n');}else message+=line+'\r\n';continue;}
         if(/^EHLO|^HELO/.test(line))socket.write('250 localhost\r\n');
+        else if(/^RCPT/.test(line)&&rejectDelivery)socket.write('550 recipient rejected\r\n');
         else if(/^MAIL|^RCPT|^RSET/.test(line))socket.write('250 OK\r\n');
         else if(line==='DATA'){reading=true;message='';socket.write('354 send data\r\n');}
         else if(line==='QUIT'){socket.end('221 bye\r\n');}
@@ -94,13 +104,21 @@ test('flujo real PostgreSQL: permisos, perfiles, vacaciones, nómina, PDF y cuen
     });
     await new Promise(resolve=>smtp.listen(0,'127.0.0.1',resolve));
     try {
-      process.env.SMTP_HOST='127.0.0.1';process.env.SMTP_PORT=String(smtp.address().port);process.env.SMTP_FROM='rrhh@example.test';process.env.SMTP_USER='';process.env.SMTP_SECURE='false';
-      assert.equal((await request(`/payslips/${item.id}/email`,{method:'POST',body:{recipient:'otro@example.test'}})).status,400);
-      assert.equal((await request(`/payslips/${item.id}/email`,{method:'POST',body:{recipient:'persona@example.test'}})).status,200);
-      assert.equal(messages.length,1);assert.match(messages[0],/application\/pdf/);assert.match(messages[0],/persona@example.test/);
-      assert.equal((await request(`/payslips/${item.id}/email`,{method:'POST',body:{recipient:'persona@example.test'}})).status,409);
+      process.env.SMTP_HOST='127.0.0.1';process.env.SMTP_PORT=String(smtp.address().port);process.env.SMTP_FROM='Contabilidad Circuito Cinco <contabilidad@circuitocinco.com>';process.env.SMTP_USER='';process.env.SMTP_SECURE='false';
+      assert.equal((await request('/bootstrap')).data.smtp_configured,true);
+      assert.equal((await request(`/payslips/${item.id}/email`,{method:'POST',body:{recipient:'otro@example.test'}})).status,409);
+      const stale=await request(`/payslips/${item.id}/email`,{method:'POST',body:{recipient:'persona@example.test'}});assert.equal(stale.status,409);assert.equal(stale.data.code,'RECIPIENT_CHANGED');
+      const concurrent=await Promise.all([1,2].map(()=>request(`/payslips/${item.id}/email`,{method:'POST',body:{recipient:'persona.actual@example.test'}})));
+      assert.deepEqual(concurrent.map(r=>r.status).sort(),[200,409]);
+      assert.equal(messages.length,1);assert.match(messages[0],/application\/pdf/);assert.match(messages[0],/To: persona.actual@example.test/);assert.match(messages[0],/contabilidad@circuitocinco.com/);
+      assert.equal((await request(`/payslips/${item.id}/email`,{method:'POST',body:{recipient:'persona.actual@example.test'}})).status,409);
       assert.equal(messages.length,1);
-    }finally{await new Promise(resolve=>smtp.close(resolve));for(const [key,value] of Object.entries({SMTP_HOST:env.host,SMTP_FROM:env.from,SMTP_PORT:env.port,SMTP_USER:env.user,SMTP_SECURE:env.secure})){if(value===undefined)delete process.env[key];else process.env[key]=value;}}
+      assert.equal((await request(`/payslips/${item.id}/email`,{method:'POST',body:{recipient:'persona.actual@example.test',resend:true}})).status,200);assert.equal(messages.length,2);
+      rejectDelivery=true;
+      assert.equal((await request(`/payslips/${item.id}/email`,{method:'POST',body:{recipient:'persona.actual@example.test',resend:true}})).status,502);
+      const history=(await request(`/payroll/${period.id}`)).data.deliveries.filter(d=>d.item_id===item.id);
+      assert.equal(history.filter(d=>d.status==='sent').length,2);assert.equal(history.filter(d=>d.status==='failed').length,1);assert.ok(history.every(d=>d.recipient==='persona.actual@example.test'));
+    }finally{await new Promise(resolve=>smtp.close(resolve));for(const [key,value] of Object.entries({SMTP_HOST:env.host,SMTP_FROM:env.from,SMTP_PORT:env.port,SMTP_USER:env.user,SMTP_PASS:env.pass,SMTP_SECURE:env.secure})){if(value===undefined)delete process.env[key];else process.env[key]=value;}}
   });
   await t.test('ingreso y salida durante una quincena requieren revisión manual y sincronización',async()=> {
     const hire=`${year}-04-08`,exit=`${year}-04-10`;

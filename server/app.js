@@ -39,6 +39,16 @@ function employeeInput(body) {
   };
 }
 const snapshot = employee => ({ full_name: employee.full_name, national_id: employee.national_id, code: employee.code, email: employee.email, position: employee.position, department: employee.department, hire_date: employee.hire_date, termination_date: employee.termination_date });
+function publicMailConfig() {
+  const host=(process.env.SMTP_HOST||'').trim();
+  const user=(process.env.SMTP_USER||'').trim();
+  const from=(process.env.SMTP_FROM||'').trim();
+  const authenticated=Boolean(user&&process.env.SMTP_PASS);
+  return {
+    smtp_configured:Boolean(host&&from&&(user?authenticated:true)&&(host.toLowerCase()==='smtp.gmail.com'?authenticated:true)),
+    smtp_from:from||'Contabilidad Circuito Cinco <contabilidad@circuitocinco.com>'
+  };
+}
 async function vacationRows(client, employeeId) {
   return (await client.query('SELECT * FROM vacations WHERE employee_id=$1 ORDER BY start_date DESC,created_at DESC', [employeeId])).rows;
 }
@@ -109,7 +119,7 @@ export function createApp(pool) {
     ]);
     const [company,employees,vacations,holidays,periods,users,auditRows] = results.map(x=>x.rows);
     const asOf = todayCR();
-    res.json({ company:company[0],employees:employees.map(e=>({...e,vacation:vacationBalance(e,vacations,asOf)})),vacations,holidays,periods,users,audit:auditRows,today:asOf,smtp_configured:Boolean(process.env.SMTP_HOST && process.env.SMTP_FROM) });
+    res.json({ company:company[0],employees:employees.map(e=>({...e,vacation:vacationBalance(e,vacations,asOf)})),vacations,holidays,periods,users,audit:auditRows,today:asOf,...publicMailConfig() });
   });
   app.get('/api/reports/vacations',async (req,res) => {
     const asOf=date(req.query.as_of || todayCR());const year=Number(req.query.year || asOf.slice(0,4));
@@ -210,7 +220,7 @@ export function createApp(pool) {
   });
   app.get('/api/payroll/:id',async (req,res) => {
     const period=await first(pool,'SELECT * FROM payroll_periods WHERE id=$1',[req.params.id],'Periodo');
-    const items=(await pool.query('SELECT * FROM payroll_items WHERE period_id=$1 ORDER BY employee_snapshot->>\'full_name\'',[period.id])).rows;
+    const items=(await pool.query("SELECT i.*,e.email AS recipient_email FROM payroll_items i JOIN employees e ON e.id=i.employee_id WHERE i.period_id=$1 ORDER BY i.employee_snapshot->>'full_name'",[period.id])).rows;
     const deliveries=(await pool.query('SELECT d.* FROM email_deliveries d JOIN payroll_items i ON i.id=d.item_id WHERE i.period_id=$1 ORDER BY d.created_at DESC',[period.id])).rows;
     res.json({ period,items,deliveries });
   });
@@ -266,16 +276,18 @@ export function createApp(pool) {
     res.setHeader('Content-Type','application/pdf');res.setHeader('Content-Disposition',`inline; filename="colilla-${period.start_date}-${item.employee_snapshot.code.replace(/[^a-zA-Z0-9_-]/g,'')}.pdf"`);res.send(pdf);
   });
   app.post('/api/payslips/:id/email',async (req,res) => {
-    if (!process.env.SMTP_HOST || !process.env.SMTP_FROM) throw new AppError('Configure SMTP en .env para habilitar el envío de colillas.',503);
+    if (!publicMailConfig().smtp_configured) throw new AppError('El correo de la empresa no está configurado completamente. Revise remitente, servidor y credencial SMTP en el servidor.',503);
     const {item,period,company}=await slipData(req.params.id);
     if (period.status!=='closed') throw new AppError('Cierre la nómina antes de enviar una colilla.');
-    if (req.body.recipient!==item.employee_snapshot.email) throw new AppError('El destinatario debe coincidir con el correo de la colilla.');
     const delivery=await transaction(pool,async client=> {
       await client.query('SELECT id FROM payroll_items WHERE id=$1 FOR UPDATE',[item.id]);
+      const employee=await first(client,'SELECT email FROM employees WHERE id=$1 FOR SHARE',[item.employee_id],'Empleado');
+      const recipient=email(employee.email);
+      if (req.body.recipient!==recipient) throw new AppError('El correo del empleado cambió o no coincide. Recargue la nómina y confirme el destinatario actualizado.',409,'RECIPIENT_CHANGED');
       const previous=(await client.query("SELECT * FROM email_deliveries WHERE item_id=$1 AND (status='sent' OR (status='sending' AND created_at>now()-interval '5 minutes')) ORDER BY created_at DESC LIMIT 1",[item.id])).rows[0];
       if (previous?.status==='sending') throw new AppError('Ya hay un envío en curso para esta colilla.',409);
       if (previous?.status==='sent' && req.body.resend!==true) throw new AppError('La colilla ya fue enviada. Confirme si desea reenviarla.',409,'ALREADY_SENT');
-      return first(client,"INSERT INTO email_deliveries(id,item_id,recipient,status,sent_by) VALUES($1,$2,$3,'sending',$4) RETURNING *",[randomUUID(),item.id,item.employee_snapshot.email,req.user.id]);
+      return first(client,"INSERT INTO email_deliveries(id,item_id,recipient,status,sent_by) VALUES($1,$2,$3,'sending',$4) RETURNING *",[randomUUID(),item.id,recipient,req.user.id]);
     });
     const transport=nodemailer.createTransport({ host:process.env.SMTP_HOST,port:Number(process.env.SMTP_PORT||587),secure:process.env.SMTP_SECURE==='true',auth:process.env.SMTP_USER ? {user:process.env.SMTP_USER,pass:process.env.SMTP_PASS} : undefined,connectionTimeout:15000,socketTimeout:20000 });
     try {

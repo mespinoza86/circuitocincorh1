@@ -1,16 +1,22 @@
 # Circuito: memoria del proyecto
 
-Última actualización: 2026-10-11, America/Costa_Rica.
+Última actualización: 2026-10-12, America/Costa_Rica.
 
 ## 1. Estado para retomar
 
 La primera versión funcional de la aplicación de recursos humanos ya está implementada y verificada. Se ejecuta localmente con HTML/CSS/JavaScript, Node.js y PostgreSQL. No está publicada en Internet.
 
-La consulta más reciente del usuario es cómo registrar medio día de vacaciones. Se revisaron el formulario y la validación existentes: Vacaciones → Registrar vacaciones, seleccionar trabajador, Duración = Medio día, misma fecha de inicio y fin, calcular y aprobar 0,5 días. Mañana/tarde se puede indicar en Observación; no hay un selector estructurado de horario. No se cambió la funcionalidad ni se registró ninguna vacación por cuenta del usuario.
+El usuario confirmó el 2026-10-12 que el traslado al nuevo servidor ya se completó y que la aplicación está corriendo allí. **La base de esa computadora es producción y la única que importa para conservar los registros de la empresa. Esta computadora es desarrollo/validación; sus datos de prueba no se transfieren a producción.** Este estado es informado por el usuario; no se accedió al servidor para verificarlo.
+
+La mejora actual es **Enviar correo junto al PDF en Nómina**. Está implementada y probada: confirmación con remitente, correo actual del perfil y adjunto PDF; cierre de nómina previo; historial y confirmación de reenvío. El usuario confirmó **contabilidad@circuitocinco.com** mediante **Gmail / Google Workspace**. No requiere cambios SQL. Integración: 17 entradas aprobadas; navegador: flujo completo, envío/reenvío SMTP simulado y escritorio/móvil aprobados, sin errores inesperados. **Falta configurar la credencial autorizada en el `.env` del servidor y comprobar una entrega real**. No se modificó ningún `.env` ni se envió correo real. Procedimiento: `CORREO_COLILLAS.md`.
+
+Se mantiene el flujo de versiones: pruebas locales, actualización de código mediante Git, nuevas migraciones cuando hagan falta, respaldo previo y verificación antes de reabrir el sistema. `ACTUALIZACIONES.md` y AGENTS.md documentan la separación. A petición del usuario se creó el commit local **Agregar envio de colillas por correo desde nomina** en `main`, incluyendo pruebas y documentación pendiente. No se hizo push ni se ejecutó una actualización en producción. Próximo paso para compartir esta versión: `git push` desde este repositorio y después seguir la guía de actualización en el servidor.
+
+El usuario primero había indicado dos ubicaciones distintas, pero interrumpió esa consulta y reemplazó ese escenario por el traslado a un servidor de la LAN. La última indicación prevalece: no seguir preparando VPN o nube por las respuestas anteriores.
 
 Antes de retomar Git, el usuario confirmó que la empresa es Circuito Cinco y solicitó adaptar el estilo al sitio https://www.circuitocinco.com/ y usar el logo adjunto. El cambio está terminado: logo oficial equivalente en mayor resolución, tipografía Montserrat local, blanco/gris/rojo en la interfaz y colillas PDF. El navegador de escritorio y móvil y las 17 entradas de integración pasaron. Se indicó reiniciar npm start en la misma terminal y recargar con Ctrl+F5 para cargar también el nuevo generador de PDF.
 
-La mejora funcional más reciente es la sugerencia de códigos internos `CC0001`, `CC0002`, etc., editables por el administrador. Está implementada y probada y su migración ya está aplicada. Se había indicado reiniciar npm start y recargar el navegador para activar el nuevo servidor; no se volvió a verificar ese reinicio durante la consulta sobre Git.
+La mejora anterior es la sugerencia de códigos internos `CC0001`, `CC0002`, etc., editables por el administrador. Está implementada y probada y su migración ya está aplicada en desarrollo. No se inspeccionó su aplicación en el servidor de producción.
 
 La instrucción permanente del usuario es conservar **toda la conversación** en `conversacion.md` y mantener **todo el contexto de trabajo** en este archivo. `AGENTS.md` indica leer ambos y actualizarlos durante cada tarea. La primera mejora funcional posterior a la entrega es la sugerencia de códigos internos, documentada abajo.
 
@@ -28,6 +34,9 @@ Comprobación posterior, al preguntar por la persistencia: el clúster del proye
 | `proyecto.md` | Estado actual, acuerdos, arquitectura, cambios, comprobaciones, limitaciones y trabajo posterior. |
 | `AGENTS.md` | Instrucciones para leer y mantener los dos archivos de memoria en próximas sesiones. |
 | `README.md` | Manual de instalación, uso, reglas, correo, copias de seguridad y traslado a servidor. |
+| `TRASLADO_SERVIDOR.md` | Guía de traslado de código y datos a un nuevo host Windows de la LAN. |
+| `ACTUALIZACIONES.md` | Protocolo de desarrollo local y actualización del servidor conservando sus datos. |
+| `CORREO_COLILLAS.md` | Uso del botón y configuración de Google Workspace con el remitente confirmado. |
 
 Los mensajes históricos no se deben reescribir para reflejar decisiones posteriores. Si una decisión cambia, documentar la sustitución aquí y agregar el nuevo mensaje a la conversación.
 
@@ -39,12 +48,19 @@ Estos documentos no contienen credenciales. No registrar valores de `.env`, cont
 - Carpeta: `C:\Users\makin\Documents\proyectos_Marco\CircuitoDashboard`.
 - Entorno: Windows y PowerShell. Node.js observado: v24.18.0; npm: 11.16.0.
 - PostgreSQL instalado en `C:/Program Files/PostgreSQL/18/bin`; versión observada en el arranque del clúster: 18.4.
-- La carpeta estaba vacía al comenzar. La revisión durante la consulta sobre Git confirmó que todavía no hay `.git` ni repositorio en esta carpeta. Git instalado: 2.55.0.windows.3. Verificar nuevamente antes de ejecutar los pasos, pues el usuario puede haberlos realizado después.
+- La carpeta estaba vacía al comenzar. El usuario ya subió el proyecto a Git según su mensaje del 2026-10-11 y `git rev-parse --is-inside-work-tree` confirmó que ahora hay un repositorio. La URL remota y su contenido no se inspeccionaron; no imprimir una URL con credenciales. Git instalado observado anteriormente: 2.55.0.windows.3.
 - País: Costa Rica. Moneda: colón costarricense, código CRC. Fechas de negocio: America/Costa_Rica.
 - Una sola empresa, aproximadamente 15 trabajadores.
 - Empresa confirmada: **Circuito Cinco**, sitio https://www.circuitocinco.com/. La aplicación se muestra como “Circuito Cinco · Recursos humanos”. El nombre interno del paquete y carpeta sigue siendo Circuito; no se cambiaron los datos de empresa que el usuario ya hubiera guardado.
-- El usuario retomó las instrucciones para Git/GitHub después de haberlo postergado. Todavía no se conoce un repositorio remoto ni se han ejecutado init, commit o push. Verificar el estado antes de continuar; no publicar datos ni elegir una cuenta remota por inferencia.
+- Git/GitHub: el usuario informa que ya publicó el código. El 2026-10-12 autorizó crear el commit de la mejora de correo y se hizo localmente en `main`; no se hizo push. Antes de una actualización, verificar la versión y sincronización real con el remoto.
 - Funcionamiento local primero; traslado futuro a una red o servidor. No se autorizó publicar información de personal en servicios externos.
+
+### Entornos confirmados el 2026-10-12
+
+- Desarrollo: esta carpeta y su base local, utilizadas exclusivamente para implementación y validaciones. El usuario no necesita conservar sus datos de prueba, pero eso no implica una orden de borrar la base ahora.
+- Producción: la otra computadora servidor de la LAN, donde el usuario comenzará a crear empleados y operar. Preservar sus registros y configuración en todas las actualizaciones.
+- El traslado inicial fue completado por el usuario. Para nuevas versiones no repetir restore ni copiar `.local/` desde desarrollo.
+- Las futuras migraciones deben probarse con registros existentes ficticios y proteger empleados, vacaciones, nóminas cerradas, cuentas y auditoría. No editar migraciones que producción ya aplicó.
 
 ## 4. Requisitos confirmados por el usuario
 
@@ -83,6 +99,7 @@ Interfaz HTML y JavaScript; servidor Node.js, aceptado expresamente; base Postgr
 - Otros rebajos también deben poder registrarse.
 - Neto: salario base de la quincena más comisiones menos todas las deducciones.
 - Generar colilla de pago y habilitar su envío al correo del trabajador.
+- Mejora solicitada el 2026-10-12: botón visible al lado del PDF en Nómina para enviar esa colilla al correo del perfil. Remitente confirmado: contabilidad@circuitocinco.com; proveedor confirmado: Gmail / Google Workspace.
 - Ante ingreso o salida durante la quincena, permitir importe salarial **manual con motivo**, conservando el salario mensual del perfil. El usuario aceptó expresamente esta sugerencia al autorizar el inicio.
 
 ### 4.5 Memoria de trabajo
@@ -128,7 +145,7 @@ Esta sección distingue reglas concretas elegidas durante el desarrollo de las p
 - Las nóminas cerradas guardan instantáneas de empresa y trabajador, correo incluido. Cambios posteriores del perfil no alteran la colilla cerrada.
 - Una nómina cerrada no se edita ni se reabre en esta versión. Correcciones o anulaciones formales quedan para después.
 - El salario vigente del perfil se usa al crear o revisar un borrador, incluso si el periodo es antiguo; no hay todavía vigencia histórica de salarios por fecha.
-- Las colillas de borrador se identifican como borrador. El envío requiere nómina cerrada y destinatario coincidente con el correo guardado en su instantánea.
+- Las colillas de borrador se identifican como borrador. El envío requiere nómina cerrada. Desde la mejora del 2026-10-12 el destinatario debe coincidir con el **correo actual del perfil**, sustituyendo la decisión inicial de usar el correo de la instantánea. El PDF histórico conserva su instantánea y sus importes.
 - La interfaz muestra ₡; los PDF usan CRC por compatibilidad con la fuente incluida.
 - Los CSV neutralizan celdas que puedan interpretarse como fórmulas.
 
@@ -172,7 +189,7 @@ Esta sección distingue reglas concretas elegidas durante el desarrollo de las p
 | Feriados | Agregar y eliminar fechas concretas, con protección del historial aprobado. |
 | Nómina | Crear quincena, revisar importes manuales, ajustes con motivo, sincronizar plantilla y cerrar. |
 | Colillas | PDF autenticado de cada fila, borrador identificado e instantánea de periodos cerrados. |
-| Correo | Ruta SMTP, vista previa/confirmación en interfaz, historial y control de reenvío. Pendiente configuración real. |
+| Correo | Botón visible junto al PDF, remitente y correo actual del perfil, confirmación, historial, errores y control de reenvío. Google Workspace confirmado; pendiente credencial y entrega real. |
 | Reportes | Vacaciones por año y fecha de saldo, detalle de fechas y exportación CSV; CSV de nómina. |
 | Administradores | Crear otras cuentas, cambiar estado, restablecer contraseña y revocar sesiones. |
 | Auditoría | Registros con autor y antes/después de cambios; detalle desde Configuración. |
@@ -224,6 +241,7 @@ La interfaz está en español. La paleta verde de la primera entrega fue reempla
 | `tests/integration.test.js` | Flujo API con PostgreSQL real y SMTP local simulado. |
 | `tests/employee-codes.test.js` | Secuencia CC, edición manual, inactivos, concurrencia y migración del historial. |
 | `tests/browser.js` | Flujo de interfaz con Playwright y capturas. |
+| `tests/smtp-server.js` | SMTP de loopback para verificar el botón sin enviar mensajes externos. |
 | `tests/backup.test.js` | Respaldo y recuperación en base aislada. |
 | `.env.example` | Plantilla de configuración sin secretos reales. |
 | `.gitignore` | Excluye dependencias, configuración privada, clúster, respaldos y artefactos de prueba. |
@@ -247,7 +265,7 @@ Las migraciones se ejecutan al iniciar el servidor y mediante `npm run db:migrat
 - La conexión con contraseña está en `.env`, no en estos archivos.
 - Existe además un servicio de PostgreSQL previo llamado `postgresql-x64-18`. No se modificó ni se utilizaron sus credenciales.
 - Variables relevantes: `HOST`, `PORT`, `APP_ORIGIN`, `DATABASE_URL`, `PG_BIN`, `COOKIE_SECURE`, `TRUST_PROXY`, `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE`, `SMTP_USER`, `SMTP_PASS`, `SMTP_FROM`.
-- SMTP real todavía no está configurado. No se ha enviado correo a trabajadores o servicios externos.
+- SMTP real todavía no se configuró durante el trabajo. El usuario confirmó Google Workspace y contabilidad@circuitocinco.com. Falta la credencial autorizada en el servidor; no se consultó su `.env`. No se ha enviado correo a trabajadores o servicios externos desde estas pruebas.
 - `.env`, `.local/`, `backups/`, `test-results/` y `node_modules/` están excluidos por `.gitignore`.
 
 ### Iniciar
@@ -310,8 +328,8 @@ Comprobaciones ejecutadas durante la implementación, el 2026-10-10. No se volvi
 | Comando/comprobación | Último resultado observado |
 | --- | --- |
 | `npm test` | 9 pruebas de dominio aprobadas. |
-| `npm run test:integration` | Tras la mejora de códigos: 17 entradas aprobadas, incluyendo los dos flujos padre y sus subpruebas. |
-| `npm run test:browser` | Repetido tras la identidad corporativa: ingreso y logo en escritorio/móvil, CC, flujo completo, colilla con imagen y móvil sin desbordamiento aprobados. |
+| `npm run test:integration` | Repetido el 2026-10-12 tras la mejora de correo: 17 entradas aprobadas; adjunto, perfil vigente, concurrencia, reenvíos y fallos SMTP incluidos. |
+| `npm run test:browser` | Repetido el 2026-10-12: flujo completo, botón junto al PDF, bloqueos de borrador/configuración, confirmación, envío/reenvío SMTP local y escritorio/móvil aprobados. |
 | `npm run test:backup` | Repetido tras la mejora: restauración de datos, migraciones y consecutivo CC aprobada. |
 | `npm audit --omit=dev` | 0 vulnerabilidades informadas. |
 | `npm run setup:local` repetido | Conservó la configuración existente. |
@@ -336,11 +354,11 @@ Tras el cambio de marca también se generaron e inspeccionaron `test-results/aut
 
 ### Pendientes ya acordados o dependientes de datos de la empresa
 
-1. **Configurar SMTP real:** se necesita el proveedor/cuenta autorizada, remitente y credencial; actualmente el código y la interfaz están listos pero el envío real permanece deshabilitado.
+1. **Configurar SMTP real:** proveedor Google Workspace y remitente contabilidad@circuitocinco.com confirmados. Falta generar/configurar una credencial autorizada en el servidor y comprobar entrega real. Leer `CORREO_COLILLAS.md`. No se ha comprobado si la cuenta permite contraseñas de aplicación; si no, consultar al administrador de Workspace sobre relay u otra implementación. OAuth2 no está implementado.
 2. **Portal de empleados:** crear y vincular cuentas, consultas de datos propios, vacaciones y colillas; verificar aislamiento en todas las rutas. Actualmente solo hay interfaz de administradores.
 3. **Automatizar Caja y renta:** el usuario lo dejó para después. Hoy son montos escritos por quincena. Cualquier cálculo automático necesitará confirmar reglas aplicables antes de implementarlo.
-4. **Traslado a red o servidor:** configurar dirección, HTTPS, cookies seguras, proxy si corresponde, rol de base con privilegios mínimos, arranque como servicio y respaldos. Todavía no se desplegó.
-5. **Carga inicial de información real:** primer administrador, empresa, empleados, días históricos y feriados. No debe inventarse ni precargarse información privada.
+4. **Preparar operación definitiva del servidor:** el usuario ya lo levantó en la LAN. HTTPS, cookies seguras, proxy si corresponde, rol de base con privilegios mínimos, arranque como servicio y respaldo automático no se verificaron ni configuraron durante esta consulta.
+5. **Carga de información real:** el usuario la realizará en la computadora de producción. No inventar, precargar, reemplazar ni mezclar sus datos con los de validación.
 
 ### Mejoras futuras propuestas; no son funcionalidades completadas ni órdenes pendientes inmediatas
 
@@ -519,6 +537,64 @@ Un intento puntual de consulta Node con `-e` perdió comillas al pasar por Power
 - Se indicó Observación como lugar para especificar mañana o tarde, sin inventar un campo de horario que todavía no existe.
 - La fecha debe cumplir también las reglas existentes de ingreso, corte histórico y superposición. No se consultaron perfiles o saldos privados para responder.
 - Se guardaron la consulta y las respuestas en `conversacion.md`, actualizando la fecha de continuación a 2026-10-11. No hubo cambios de código ni necesidad de repetir pruebas funcionales para una explicación del uso existente.
+
+### 2026-10-11 — Consulta interrumpida sobre acceso desde otro equipo
+
+- El usuario informó que ya subió el proyecto a Git y preguntó qué instalar en otra computadora y cómo manejar la base.
+- Se preguntó si reemplazaría al equipo actual o compartirían datos; respondió “Usar ambas con datos compartidos”. Después, ante la pregunta de la red, respondió “No, ubicaciones diferentes”.
+- Se revisaron scripts, configuración, estado Git y metadatos de red. Se observó un repositorio local válido y PostgreSQL escuchando solo en 127.0.0.1:55432. No se leyeron credenciales.
+- Se investigaron las alternativas de un único servidor con HTTPS o VPN privada, y documentación oficial de PostgreSQL, Node.js, Git, Express, Windows firewall y Tailscale. No se instaló ni configuró una VPN ni se contrataron servicios.
+- El usuario interrumpió el turno antes de una respuesta final. No quedaron scripts funcionales de esa alternativa ni procesos propios corriendo.
+
+### 2026-10-11 — Explicación de traslado a un nuevo servidor de la LAN
+
+- La última instrucción reemplaza el escenario anterior: otra computadora será host del programa y de PostgreSQL y los clientes estarán en la misma LAN. El usuario pidió solo explicación.
+- Se revisaron setup:local, backup, configuración, arranque, control de origen y prueba de restauración existente. Se consultaron fuentes oficiales para instaladores, Git clone, pg_restore y firewall.
+- Se confirmó que `setup:local` crea una base vacía antes de migraciones. Para restaurar datos existentes, no se debe ejecutar npm start, Iniciar.cmd ni db:migrate antes del pg_restore completo.
+- Se preparó `TRASLADO_SERVIDOR.md` y se agregó su enlace a README. Incluye respaldo con registros congelados, instalación y descarga, contraseña nueva del rol local, restore de una sola transacción sin sobreescribir propietarios/privilegios, migraciones y verificación con cuentas restauradas.
+- Se explicaron HOST=0.0.0.0, puerto 3001, APP_ORIGIN con la IP real del nuevo servidor y acceso por esa misma dirección desde todos los navegadores.
+- Se documentó una regla de firewall para 3001, perfiles Private/Domain y subred local, sin exponer PostgreSQL 55432. La configuración propuesta es HTTP inicial para comprobar la LAN; HTTPS, arranque como servicio y respaldo automático quedan por preparar para uso definitivo.
+- Se mantuvieron las contraseñas y registros fuera de los documentos. El destino genera un `.env` nuevo; si había SMTP se trasladan esos ajustes aparte, sin reemplazar la conexión nueva de la base.
+- No se ejecutaron respaldo, restauración, clonado, cambios de `.env`, comandos de firewall ni pasos en la computadora destino. No se cambiaron archivos de aplicación ni se simularon resultados de una migración real.
+- Se guardaron también el turno interrumpido y la nueva solicitud en `conversacion.md`. Los últimos resultados funcionales de pruebas siguen siendo los ya registrados; para esta explicación no se repitieron.
+
+### 2026-10-12 — Desarrollo separado de producción y actualizaciones
+
+- El usuario confirmó que el programa y la base ya se trasladaron y funcionan en el otro equipo, que será el servidor de producción. Esta computadora queda para pruebas y su base no es la oficial.
+- Se revisaron el ejecutor de migraciones y el arranque: las migraciones se registran por nombre y se omiten las ya aplicadas; los archivos nuevos se ejecutan en una transacción.
+- Se comprobó con git ls-files que `.env`, `.local/` y `backups/` no están versionados en este repositorio y con git check-ignore que permanecen excluidos. No se inspeccionó el repositorio ni la base del servidor.
+- Se explicaron las actualizaciones por código y migraciones compatibles, con respaldo antes de aplicar y sin restaurar la base de desarrollo ni repetir la instalación inicial.
+- Se creó ACTUALIZACIONES.md, se enlazó desde README y se agregaron a AGENTS.md las reglas permanentes para la separación de entornos y protección de producción.
+- Se describió el flujo de servidor: detener Node, conservar PostgreSQL activo, comprobar estado y versión, respaldar, git pull --ff-only, npm ci, migrar, arrancar y verificar. Los pasos se ejecutan uno a uno y se detienen si falla alguno.
+- Se registró que un cambio de esquema necesita una migración nueva y pruebas con datos ya existentes; no se garantiza preservación por el solo hecho de llamarlo migración.
+- Se consultaron fuentes oficiales de Git y PostgreSQL. No se cambiaron archivos de aplicación ni SQL, no se reinició el programa y no se ejecutaron pruebas o comandos de despliegue en producción.
+- Se guardó la anotación del usuario y todo el intercambio en conversacion.md. Las mejoras futuras siguen pendientes de que el usuario las especifique.
+
+### 2026-10-12 — Botón de envío de colillas y Google Workspace
+
+- Solicitud: botón junto al PDF en Nómina, con entrega al correo del empleado guardado en la base. El usuario confirmó remitente contabilidad@circuitocinco.com y después Gmail / Google Workspace; no facilitó credenciales.
+- Se revisaron memoria, conversación, README, interfaz, API, generación PDF, configuración y pruebas existentes. El envío ya existía como icono oculto en borradores y deshabilitado sin SMTP. Se reutilizó y mejoró el flujo existente.
+- `public/app.js`: acciones con textos PDF / Enviar correo / Reenviar correo; botón siempre visible para revisar, confirmación con direcciones de solo lectura y adjunto, avisos por cierre o configuración pendientes, envío bloqueado hasta cumplir requisitos, historial actualizado tras éxito y fallos, y preservación del estado disabled de formularios.
+- `public/styles.css`: presentación de botones y confirmación, remitente/destinatario con ajuste de líneas y adaptación móvil. Las capturas se inspeccionaron visualmente.
+- `server/app.js`: bootstrap informa configuración SMTP completa y remitente, sin secretos; falta de credencial deshabilita Gmail y SMTP con usuario; consulta de nómina obtiene `recipient_email` del perfil vigente; envío revalida esa dirección bajo bloqueo y rechaza correo antiguo o arbitrario. No cambia instantáneas ni importes cerrados. Se conserva protección contra envíos simultáneos y reenvíos sin confirmar, PDF compartido, registro de fallos y auditoría.
+- `.env.example`: remitente/usuario confirmados, puerto 465 y cifrado; SMTP_HOST y SMTP_PASS vacíos hasta activar. No se modificó el `.env` local o del servidor. Un git pull no configura esas variables privadas.
+- `tests/integration.test.js`: comprueba Gmail incompleto, perfil actualizado después del cierre sin alterar neto/instantánea, rechazo de correo antiguo y arbitrario, dos envíos concurrentes con una sola aceptación, adjunto PDF, remitente, reenvío y fallo SMTP con historial.
+- `tests/browser.js` y nuevo `tests/smtp-server.js`: botón en borrador y periodo cerrado, PDF y dirección revisables, ausencia de campos para sobrescribir destinatario, bloqueos explicados, envío y reenvío a SMTP de loopback, escritorio y móvil sin desbordamiento. Todos los destinatarios de prueba usan example.test.
+- Verificaciones: `node --check public/app.js`, `node --check server/app.js` aprobados; `npm.cmd run test:integration`: 17 entradas aprobadas, 0 fallos; `npm.cmd run test:browser`: aprobado, sin errores de JavaScript ni consola inesperados; `git diff --check`: sin errores de espacios. Git avisó conversión LF/CRLF habitual de Windows, sin alteración de UTF-8.
+- Artefactos: `test-results/payroll.png`, `test-results/payslip-email.png`, `test-results/payslip-email-mobile.png`, junto a las capturas generales del flujo. Son ficticios y están ignorados por Git. Los servidores y bases temporales de pruebas se cerraron al finalizar; no se detuvo el programa que el usuario pueda estar usando ni PostgreSQL.
+- Se consultó documentación oficial actual de Google y Nodemailer. DNS público del dominio apuntaba a Google; se pidió y recibió confirmación del usuario antes de documentar el proveedor. Credencial, permisos de la organización y entrega real no fueron verificados.
+- Nuevo `CORREO_COLILLAS.md`: preparación de cuenta/contraseña de aplicación si está permitida, cambios exclusivos SMTP en .env, reinicio, uso y comprobación. README y esta memoria actualizados; conversación preservada en orden.
+- No hay migración nueva ni cambios en `db/`, dependencias o estructura. No se restauró ni trasladó ninguna base. No se hizo commit/push o despliegue ni se envió correo externo. Los cambios previos no confirmados de documentación/traslado permanecen en el repositorio.
+- Próximo punto: el usuario puede validar la interfaz reiniciando Node.js y recargando. Para producción, guardar la versión en Git, actualizar mediante ACTUALIZACIONES.md, configurar credencial en el servidor siguiendo CORREO_COLILLAS.md y comprobar el primer envío autorizado. Nunca compartir esa credencial por chat ni guardarla en estas memorias.
+
+### 2026-10-12 — Commit de la mejora de correo y documentación
+
+- El usuario pidió hacer commit para mantener Git al día. Se incluyeron los 14 archivos pendientes de la mejora y documentación de continuidad, configuración de correo, traslado y actualizaciones, todos revisados en este contexto.
+- Se comprobaron rama `main`, último commit previo `45386e3` (First commit), cambios y ausencia de archivos previamente preparados en el índice. `git diff --check` y `git diff --cached --check` pasaron.
+- `git check-ignore` confirmó exclusión de .env, .local, backups, test-results y node_modules. Se agregaron únicamente los 14 archivos explícitos de código/pruebas/documentación y .env.example sin credenciales reales; no se agregaron datos de PostgreSQL.
+- `git commit -m "Agregar envio de colillas por correo desde nomina"` terminó con éxito. Se incorporó al mismo commit su registro en la memoria y el cierre de este turno mediante amend del commit recién creado; no se modificó historia publicada. Para consultar el identificador vigente: `git log -1 --oneline`.
+- No se hicieron cambios funcionales ni se repitieron pruebas ya aprobadas en el turno anterior. No se hizo push, se contactó el servidor de producción, se configuró SMTP o se enviaron mensajes.
+- Próximo paso: subir el commit al remoto con git push, actualizar producción mediante ACTUALIZACIONES.md y configurar correo mediante CORREO_COLILLAS.md cuando corresponda. La configuración de credencial y primera entrega real siguen pendientes.
 
 ## 13. Protocolo de continuación
 

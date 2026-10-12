@@ -4,9 +4,13 @@ import {join,resolve} from 'node:path';
 import assert from 'node:assert/strict';
 import {testServer,admin,employee} from './helpers.js';
 import {todayCR} from '../server/domain.js';
+import {smtpServer} from './smtp-server.js';
 
 const resultDirectory=resolve('test-results');mkdirSync(resultDirectory,{recursive:true});
 const instance=await testServer();
+const smtpEnvironment=Object.fromEntries(['SMTP_HOST','SMTP_PORT','SMTP_SECURE','SMTP_USER','SMTP_PASS','SMTP_FROM'].map(key=>[key,process.env[key]]));
+process.env.SMTP_HOST='';process.env.SMTP_FROM='Contabilidad Circuito Cinco <contabilidad@circuitocinco.com>';
+let smtp;
 let browser;
 const errors=[];
 let expectedConflict=false;
@@ -79,12 +83,44 @@ try {
   console.log('✓ Búsqueda, medio día de vacaciones y confirmación del saldo negativo.');
   await page.getByRole('button',{name:'Feriados',exact:true}).click();await page.getByRole('button',{name:'Agregar feriado',exact:true}).click();await page.getByLabel('Nombre del feriado').fill('Feriado de prueba');await page.getByLabel('Fecha exacta').fill(`${nextYear}-05-01`);await page.getByRole('button',{name:'Agregar feriado',exact:true}).last().click();await page.locator('#modal').waitFor({state:'hidden'});await page.getByText('Feriado de prueba',{exact:true}).waitFor();
   await page.getByRole('button',{name:'Nómina',exact:true}).click();await page.getByRole('button',{name:'Nueva quincena',exact:true}).click();await page.getByLabel('Año',{exact:true}).fill(String(nextYear));await page.getByLabel('Mes',{exact:true}).selectOption('3');await page.getByLabel('Quincena',{exact:true}).selectOption('1');await page.getByRole('button',{name:'Crear borrador'}).click();await page.locator('#modal').waitFor({state:'hidden'});await page.getByText('Nómina en preparación.',{exact:true}).waitFor();
+  const emailButton=page.getByRole('button',{name:`Enviar colilla a ${e.full_name}`,exact:true});
+  assert.equal(await emailButton.isVisible(),true);
+  await emailButton.click();
+  await page.locator('#modal').getByText('Primero cierra la nómina para enviar una colilla con importes definitivos.',{exact:true}).waitFor();
+  assert.equal(await page.locator('#modal button[type="submit"]').isDisabled(),true);
+  await page.getByRole('button',{name:'Cancelar',exact:true}).click();
   for(const name of data.employees.map(e=>e.full_name)) {
     await page.getByRole('button',{name:`Revisar pago de ${name}`,exact:true}).click();await page.getByLabel('Comisiones (₡)').fill('20000');await page.getByLabel('Caja (₡)').fill('45000');await page.getByLabel('Renta (₡)').fill('5000');await page.getByLabel('Préstamos (₡)').fill('10000');await page.getByRole('button',{name:'Guardar como revisado'}).click();await page.locator('#modal').waitFor({state:'hidden'});
   }
   await page.getByRole('button',{name:'Cerrar nómina',exact:true}).click();await page.getByLabel('Confirmo que revisé los importes de todos los trabajadores.').check();await page.getByRole('button',{name:'Cerrar y conservar importes'}).click();await page.locator('#modal').waitFor({state:'hidden'});await page.getByText('Nómina cerrada.',{exact:true}).waitFor();
   const pdfHref=await page.getByRole('link',{name:`Ver colilla de ${e.full_name}`,exact:true}).getAttribute('href');const pdf=await context.request.get(instance.base+pdfHref);assert.equal(pdf.status(),200);const pdfBytes=await pdf.body();assert.ok(pdfBytes.subarray(0,4).toString()==='%PDF');assert.ok(pdfBytes.includes(Buffer.from('/Subtype /Image')));
   await page.screenshot({path:join(resultDirectory,'payroll.png'),fullPage:true});console.log('✓ Nómina manual, cierre y PDF autenticado.');
+  await emailButton.click();
+  assert.equal(await page.locator('#modal button[type="submit"]').isDisabled(),true);
+  assert.match(await page.locator('#modal').innerText(),/El correo de la empresa aún no está configurado/);
+  assert.equal(await page.locator('#modal input[type="email"]').count(),0);
+  await page.getByRole('button',{name:'Cancelar',exact:true}).click();
+  smtp=await smtpServer();
+  process.env.SMTP_HOST='127.0.0.1';process.env.SMTP_PORT=String(smtp.port);process.env.SMTP_SECURE='false';process.env.SMTP_USER='';process.env.SMTP_PASS='';
+  const periodId=(await (await context.request.get(instance.base+'/api/bootstrap')).json()).periods[0].id;
+  await page.reload();await page.getByRole('heading',{name:'Todo tu equipo, en un vistazo.'}).waitFor();
+  await page.getByRole('button',{name:'Nómina',exact:true}).click();await page.locator(`[data-action="payroll-open"][data-id="${periodId}"]`).click();
+  await emailButton.click();
+  assert.match(await page.locator('#modal').innerText(),/contabilidad@circuitocinco.com/);
+  assert.ok((await page.locator('#modal .email-address').last().innerText()).includes(e.email));
+  assert.equal(await page.locator('#modal button[type="submit"]').isEnabled(),true);
+  await page.screenshot({path:join(resultDirectory,'payslip-email.png'),fullPage:true});
+  await page.setViewportSize({width:390,height:844});
+  assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>window.innerWidth),false);
+  await page.screenshot({path:join(resultDirectory,'payslip-email-mobile.png'),fullPage:true});
+  await page.setViewportSize({width:1440,height:1000});
+  await page.locator('#modal').getByRole('button',{name:'Enviar correo',exact:true}).click();await page.locator('#modal').waitFor({state:'hidden'});
+  assert.equal(smtp.messages.length,1);assert.match(smtp.messages[0],/application\/pdf/);assert.ok(smtp.messages[0].includes(`To: ${e.email}`));
+  await page.getByText('Correo aceptado',{exact:true}).waitFor();
+  await page.getByRole('button',{name:`Reenviar colilla a ${e.full_name}`,exact:true}).click();
+  assert.match(await page.locator('#modal').innerText(),/ya fue aceptada/);
+  await page.locator('#modal').getByRole('button',{name:'Reenviar correo',exact:true}).click();await page.locator('#modal').waitFor({state:'hidden'});assert.equal(smtp.messages.length,2);
+  console.log('✓ Botón junto al PDF, bloqueo de borrador/configuración, destinatario, envío y reenvío SMTP local.');
   await page.getByRole('button',{name:'Reportes',exact:true}).click();await page.getByRole('heading',{name:'Información para decidir'}).waitFor();await page.getByRole('button',{name:'Exportar CSV',exact:true}).waitFor({state:'visible'});
   const downloadPromise=page.waitForEvent('download');await page.getByRole('button',{name:'Exportar CSV',exact:true}).click();const download=await downloadPromise;assert.match(download.suggestedFilename(),/^vacaciones-/);
   await page.getByRole('button',{name:'Configuración',exact:true}).click();await page.getByRole('heading',{name:'Tu espacio de trabajo'}).waitFor();assert.ok(await page.getByText('Historial de cambios',{exact:true}).isVisible());
@@ -93,4 +129,4 @@ try {
   await page.screenshot({path:join(resultDirectory,'mobile.png'),fullPage:true});console.log('✓ Reportes, exportación CSV, historial y vista móvil sin desbordamiento.');
   assert.deepEqual(errors,[]);console.log('✓ Sin errores de JavaScript ni de consola. Capturas en test-results/.');
 }catch(error){console.error(error);process.exitCode=1;}
-finally{if(browser)await browser.close();await instance.close();}
+finally{if(browser)await browser.close();if(smtp)await smtp.close();await instance.close();for(const [key,value] of Object.entries(smtpEnvironment)){if(value===undefined)delete process.env[key];else process.env[key]=value;}}

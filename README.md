@@ -115,18 +115,22 @@ El historial registra las modificaciones junto a la cuenta responsable. La inter
 
 ## Configurar el correo
 
-Complete en `.env` los datos de un servicio SMTP que autorice la empresa:
+El remitente confirmado es **contabilidad@circuitocinco.com**, mediante **Google Workspace**. Siga [CORREO_COLILLAS.md](CORREO_COLILLAS.md) para preparar la cuenta, actualizar el servidor y configurar solamente las variables SMTP de su `.env` existente:
 
 ```dotenv
-SMTP_HOST=smtp.su-proveedor.com
-SMTP_PORT=587
-SMTP_SECURE=false
-SMTP_USER=rrhh@su-empresa.com
-SMTP_PASS=su-credencial-de-correo
-SMTP_FROM="Recursos Humanos <rrhh@su-empresa.com>"
+SMTP_HOST=smtp.gmail.com
+SMTP_PORT=465
+SMTP_SECURE=true
+SMTP_USER=contabilidad@circuitocinco.com
+SMTP_PASS=REEMPLAZAR_POR_CONTRASENA_DE_APLICACION
+SMTP_FROM="Contabilidad Circuito Cinco <contabilidad@circuitocinco.com>"
 ```
 
-Reinicie el servidor. Para el puerto 465 use `SMTP_SECURE=true`. La interfaz habilitará el botón de correo y mostrará el destinatario y el PDF antes de confirmar. Los envíos quedan registrados como en curso, aceptados por SMTP o fallidos. La aceptación del servidor no garantiza la llegada a la bandeja del trabajador. Un reenvío después de un envío aceptado requiere confirmación.
+Use una contraseña de aplicación si la cuenta y las políticas de Workspace lo permiten; requiere verificación en dos pasos. No use la contraseña normal de Gmail. [Ayuda de Google](https://support.google.com/accounts/answer/185833?hl=es). No comparta credenciales por chat ni Git.
+
+Reinicie el servidor y recargue el navegador. En Nómina, **Enviar correo** permanece visible junto al **PDF** y abre la revisión del remitente, destinatario y adjunto. El envío exige una nómina cerrada y SMTP configurado. Se utiliza el **correo actual del perfil del empleado**, aunque haya cambiado después del cierre; el PDF conserva su instantánea original. El servidor rechaza un destinatario que haya cambiado después de abrir la confirmación.
+
+Los envíos quedan registrados como en curso, aceptados por SMTP o fallidos. La aceptación del servidor no garantiza la llegada a la bandeja del trabajador. Un reenvío después de un envío aceptado requiere confirmación. No se envía automáticamente al cerrar una nómina.
 
 Las pruebas de correo emplean un servidor SMTP simulado en esta computadora. No se han enviado correos a trabajadores ni a servicios externos.
 
@@ -141,6 +145,10 @@ Crea un archivo PostgreSQL en `backups/`. Guarde una copia adicional en otra ubi
 Para restaurar, cree una **base nueva y vacía** con PostgreSQL y ejecute `pg_restore --no-owner --no-privileges --exit-on-error --dbname=NUEVA_BASE RUTA_DEL_RESPALDO`, usando el usuario y conexión correspondientes. Después apunte `DATABASE_URL` a esa base y ejecute las migraciones. No restaure encima de la base activa. La prueba `npm run test:backup` verifica la recuperación en una base temporal.
 
 ## Traslado a una red o servidor
+
+El usuario confirmó que el traslado ya se completó y que el servidor tiene la base oficial. Para mejoras posteriores, siga [ACTUALIZACIONES.md](ACTUALIZACIONES.md): desarrollar y probar en el equipo local, actualizar código y nuevas migraciones, conservando la base y configuración del servidor. La guía de traslado siguiente corresponde a la instalación inicial, no a cada actualización.
+
+Para trasladar los datos existentes a **otra computadora Windows que será servidor de la LAN**, siga [TRASLADO_SERVIDOR.md](TRASLADO_SERVIDOR.md). Incluye requisitos, clonación del repositorio, restauración antes de crear tablas, configuración de origen y firewall, y acceso desde los navegadores de los clientes. La restauración utiliza una base nueva vacía; no copie el `.env` antiguo encima del generado en el destino.
 
 La interfaz y el API se sirven desde un mismo origen. Para una red, configure `HOST`, `PORT` y `APP_ORIGIN` con la dirección real del servidor. Para acceso desde otros dispositivos, use HTTPS, `COOKIE_SECURE=true` y un proxy inverso; `TRUST_PROXY=true` presupone exactamente un proxy confiable delante del proceso. Mantenga PostgreSQL restringido al servidor de la aplicación. Utilice un rol de base de datos sin permiso CREATEDB en producción, aparte de un rol para migraciones.
 

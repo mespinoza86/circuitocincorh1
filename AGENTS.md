@@ -22,6 +22,12 @@ Estas instrucciones responden a la petición del usuario de conservar la convers
 
 ## Alcance y operación
 
+- Esta computadora es desarrollo y validación; su base local no es la base oficial. La computadora servidor de la LAN es producción y su base contiene los datos importantes de la empresa, según la confirmación del usuario del 2026-10-12.
+- Esa identificación corresponde al equipo donde se desarrolló originalmente el proyecto. Si estas instrucciones se leen desde otro clon, no asumir por ello que el equipo es de pruebas: confirmar el entorno antes de operaciones que afecten una base.
+- Realizar desarrollo y pruebas aquí. No conectar las pruebas a producción ni restaurar allí la base de desarrollo. No borrar ni reemplazar datos de producción sin una instrucción expresa del usuario para esa operación.
+- Las actualizaciones al servidor transfieren código y migraciones compatibles, conservando su `.env`, `.local/` y respaldos. No repetir el traslado inicial para una actualización ordinaria.
+- Agregar cambios de esquema como nuevas migraciones numeradas; no editar migraciones ya aplicadas. Probarlas con datos ficticios existentes, verificando conservación de registros y resultados de negocio, antes de indicar su aplicación en producción.
+- Antes de una actualización en producción, respaldar, comprobar el resultado y registrar la versión. Si falla un paso, detener la actualización y revisar el caso; no forzar Git, limpiar archivos ignorados ni restaurar una copia antigua automáticamente.
 - El proyecto es local, para una empresa de Costa Rica. No publicar ni desplegar en servicios externos por inferencia.
 - La configuración PostgreSQL del proyecto está separada del servicio PostgreSQL existente. No modificar ese servicio ni otras bases.
 - Los datos de la empresa están en PostgreSQL; los documentos de memoria no reemplazan respaldos.
