@@ -9,6 +9,8 @@ import { installAuth, adminOnly, passwordHash, publicUser } from './auth.js';
 import { payslipPdf } from './pdf.js';
 import { nextEmployeeCode, rememberEmployeeCode } from './employee-codes.js';
 import {currentAguinaldoYear,aguinaldoPeriod,aguinaldoReport} from './aguinaldo.js';
+import {calculateFor,exceptionInput,deductionReview} from './deductions.js';
+import {installDeductionRoutes} from './deduction-api.js';
 
 const first = async (client, query, values = [], label = 'Registro') => {
   const result = await client.query(query, values);
@@ -74,14 +76,34 @@ async function validateVacation(client, body) {
 async function savePayrollItem(client, actor, period, employee, inputs, existing = null) {
   await client.query('SELECT pg_advisory_xact_lock(74210619)');
   if((await client.query('SELECT 1 FROM salary_history WHERE employee_id=$1 AND year=$2 AND month=$3 AND active',[employee.id,period.year,period.month])).rowCount)throw new AppError(`El mes ya tiene un salario histórico para ${employee.full_name}. Retire ese histórico antes de registrar la nómina del mismo mes.`,409,'SALARY_HISTORY_OVERLAP');
-  const amounts = payrollAmounts(employee.monthly_salary_cents, inputs, period.half);
+  const automatic=period.deduction_mode==='automatic';
+  const amounts = payrollAmounts(employee.monthly_salary_cents, automatic?{...inputs,caja:0,renta:0}:inputs, period.half,{deferNetValidation:automatic});
+  let deduction=null,refund=0,employer=0,exception=null;
+  if(automatic&&inputs.reviewed) {
+    deduction=await calculateFor(client,employee,period,amounts);
+    const expected=deductionReview(deduction,employee,amounts);
+    if(!inputs.deduction_review||Object.entries(expected).some(([key,value])=>inputs.deduction_review[key]!==value))throw new AppError('Calcule de nuevo y revise las deducciones: la base o las reglas cambiaron desde la vista previa.',409,'DEDUCTION_PREVIEW_CHANGED');
+    amounts.caja=deduction.caja;amounts.renta=deduction.renta;refund=deduction.refund;employer=deduction.employer;
+    if(period.half===2&&deduction.snapshot.difference_cents!==0) {
+      if(inputs.confirm_tax_adjustment!==true)throw new AppError('Revise y confirme el cobro adicional o devolución de renta antes de guardar.',409,'TAX_ADJUSTMENT_CONFIRMATION');
+      deduction.snapshot.confirmation_note=text(inputs.tax_adjustment_note,'Motivo de la conciliación',{max:1000});
+    }
+    exception=exceptionInput(inputs);
+    if(exception&&(exception.end<period.start_date||exception.start>period.end_date))throw new AppError('La excepción debe tocar esta quincena.');
+  }
+  if(automatic) {
+    amounts.deductions=amounts.caja+amounts.renta+amounts.loan+amounts.other;
+    amounts.net=amounts.gross+refund-amounts.deductions;
+    if(amounts.net<0)throw new AppError('El neto quedaría negativo. Revise las deducciones y registre un tratamiento documentado; el saldo no se traslada automáticamente.',409,'NEGATIVE_PAYROLL_NET');
+  }
   const partial = employee.hire_date > period.start_date || (employee.termination_date && employee.termination_date < period.end_date);
   if (partial && inputs.reviewed && !amounts.adjustment_reason) throw new AppError('El trabajador ingresó o salió durante la quincena. Registre el motivo del salario revisado para este periodo.');
   const data = { employee_snapshot: snapshot(employee), monthly_salary_cents: employee.monthly_salary_cents,
     automatic_cents: amounts.automatic, base_cents: amounts.base, commissions_cents: amounts.commissions,
     caja_cents: amounts.caja, renta_cents: amounts.renta, loan_cents: amounts.loan, other_cents: amounts.other,
     gross_cents: amounts.gross, deductions_cents: amounts.deductions, net_cents: amounts.net,
-    adjustment_reason: amounts.adjustment_reason, other_reason: amounts.other_reason, reviewed: inputs.reviewed === true, updated_by: actor };
+    adjustment_reason: amounts.adjustment_reason, other_reason: amounts.other_reason, reviewed: inputs.reviewed === true, updated_by: actor,
+    ...(automatic?{tax_refund_cents:refund,employer_cents:employer,deduction_snapshot:deduction?JSON.stringify(deduction.snapshot):null,exception_data:exception?JSON.stringify(exception):null}:{}) };
   const keys = Object.keys(data); const values = Object.values(data);
   let result;
   if (existing) {
@@ -112,6 +134,7 @@ export function createApp(pool) {
   installAuth(app,pool);
   // Las cuentas de empleado quedan previstas, pero no se habilitan en esta versión.
   app.use('/api',adminOnly);
+  installDeductionRoutes(app,pool);
   app.get('/api/bootstrap',async (req,res) => {
     const results = await Promise.all([
       pool.query('SELECT * FROM company WHERE id=1'),pool.query('SELECT * FROM employees ORDER BY active DESC,full_name'),
@@ -254,7 +277,15 @@ export function createApp(pool) {
   app.post('/api/payroll',async (req,res) => {
     const dates=payPeriod(req.body.year,req.body.month,req.body.half);
     const period=await transaction(pool,async client=> {
-      const p=await first(client,'INSERT INTO payroll_periods(id,year,month,half,start_date,end_date) VALUES($1,$2,$3,$4,$5,$6) RETURNING *',[randomUUID(),dates.year,dates.month,dates.half,dates.start,dates.end]);
+      await client.query('SELECT pg_advisory_xact_lock(74210619)');await client.query('SELECT pg_advisory_xact_lock(74210620)');
+      const control=await first(client,'SELECT * FROM deduction_control WHERE id=1');
+      const related=(await client.query('SELECT status,deduction_mode FROM payroll_periods WHERE year=$1 AND month=$2',[dates.year,dates.month])).rows;
+      const closedManual=related.some(p=>p.status==='closed'&&p.deduction_mode==='manual');
+      const existingAutomatic=related.some(p=>p.deduction_mode==='automatic');
+      if(closedManual&&existingAutomatic)throw new AppError('Hay modos de deducción incompatibles en ese mes. Revise sus periodos antes de continuar.',409);
+      const mode=closedManual?'manual':existingAutomatic?'automatic':control.enabled&&dates.start>=control.official_start?'automatic':'manual';
+      if(mode==='automatic'&&related.some(p=>p.deduction_mode==='manual'))throw new AppError('Este mes tiene un borrador manual. Active el cálculo automático para el mes antes de crear otra quincena automática.',409);
+      const p=await first(client,'INSERT INTO payroll_periods(id,year,month,half,start_date,end_date,deduction_mode) VALUES($1,$2,$3,$4,$5,$6,$7) RETURNING *',[randomUUID(),dates.year,dates.month,dates.half,dates.start,dates.end,mode]);
       const employees=(await client.query('SELECT * FROM employees WHERE hire_date <= $1 AND (termination_date IS NULL OR termination_date >= $2) ORDER BY full_name',[dates.end,dates.start])).rows;
       if (!employees.length) throw new AppError('No hay trabajadores con relación laboral durante este periodo.');
       for (const employee of employees) await savePayrollItem(client,req.user.id,p,employee,{});
@@ -270,6 +301,7 @@ export function createApp(pool) {
   app.put('/api/payroll/:periodId/items/:id',async (req,res) => {
     const result=await transaction(pool,async client=> {
       await client.query('SELECT pg_advisory_xact_lock(74210619)');
+      await client.query('SELECT pg_advisory_xact_lock(74210620)');
       const period=await first(client,'SELECT * FROM payroll_periods WHERE id=$1 FOR UPDATE',[req.params.periodId],'Periodo');
       if (period.status!=='draft') throw new AppError('La nómina está cerrada. Sus importes no se pueden modificar.',409);
       const item=await first(client,'SELECT * FROM payroll_items WHERE id=$1 AND period_id=$2 FOR UPDATE',[req.params.id,period.id],'Detalle');
@@ -280,15 +312,22 @@ export function createApp(pool) {
   });
   app.post('/api/payroll/:id/close',async (req,res) => {
     const result=await transaction(pool,async client=> {
+      await client.query('SELECT pg_advisory_xact_lock(74210619)');await client.query('SELECT pg_advisory_xact_lock(74210620)');
       const before=await first(client,'SELECT * FROM payroll_periods WHERE id=$1 FOR UPDATE',[req.params.id],'Periodo');
       if (before.status!=='draft') throw new AppError('El periodo ya está cerrado.',409);
       const items=(await client.query('SELECT * FROM payroll_items WHERE period_id=$1',[before.id])).rows;
       if (!items.length || items.some(i=>!i.reviewed)) throw new AppError('Revise y guarde cada trabajador antes de cerrar la nómina.');
+      if((await client.query('SELECT 1 FROM payroll_periods WHERE year=$1 AND month=$2 AND id<>$3 AND deduction_mode<>$4',[before.year,before.month,before.id,before.deduction_mode])).rowCount)throw new AppError('Las dos quincenas del mes deben usar el mismo modo de deducción. Revise su activación antes de cerrar.',409);
       const employees=(await client.query('SELECT * FROM employees WHERE hire_date <= $1 AND (termination_date IS NULL OR termination_date >= $2) FOR SHARE',[before.end_date,before.start_date])).rows;
       if (employees.length!==items.length || employees.some(e=>!items.some(i=>i.employee_id===e.id))) throw new AppError('La plantilla cambió desde que se creó el borrador. Complete el periodo con el botón «Actualizar plantilla».');
       for (const item of items) {
         const e=employees.find(e=>e.id===item.employee_id);
         if (Number(e.monthly_salary_cents)!==Number(item.monthly_salary_cents) || Object.entries(snapshot(e)).some(([key,value])=>item.employee_snapshot[key]!==value)) throw new AppError('Hay perfiles actualizados desde la revisión. Vuelva a guardar los trabajadores afectados antes de cerrar.');
+        if(before.deduction_mode==='automatic') {
+          const a={gross:Number(item.gross_cents),commissions:Number(item.commissions_cents)};
+          const calc=await calculateFor(client,e,before,a);
+          if(!item.deduction_snapshot||item.deduction_snapshot.rule.id!==calc.snapshot.rule.id||Number(item.caja_cents)!==calc.caja||Number(item.renta_cents)!==calc.renta||Number(item.tax_refund_cents)!==calc.refund||Number(item.employer_cents)!==calc.employer||item.deduction_snapshot.monthly_gross_cents!==calc.snapshot.monthly_gross_cents)throw new AppError('Cambió la base o configuración de deducciones. Revise de nuevo los pagos antes de cerrar.',409,'DEDUCTIONS_CHANGED');
+        }
       }
       const company=(await client.query('SELECT * FROM company WHERE id=1 FOR SHARE')).rows[0];
       const after=await first(client,"UPDATE payroll_periods SET status='closed',closed_at=now(),closed_by=$1,company_snapshot=$2 WHERE id=$3 RETURNING *",[req.user.id,company,before.id]);
@@ -298,6 +337,7 @@ export function createApp(pool) {
   app.post('/api/payroll/:id/sync',async (req,res) => {
     await transaction(pool,async client=> {
       await client.query('SELECT pg_advisory_xact_lock(74210619)');
+      await client.query('SELECT pg_advisory_xact_lock(74210620)');
       const period=await first(client,'SELECT * FROM payroll_periods WHERE id=$1 FOR UPDATE',[req.params.id],'Periodo');
       if (period.status!=='draft') throw new AppError('Solo se puede actualizar la plantilla de un borrador.',409);
       const employees=(await client.query('SELECT * FROM employees WHERE hire_date <= $1 AND (termination_date IS NULL OR termination_date >= $2) FOR SHARE',[period.end_date,period.start_date])).rows;

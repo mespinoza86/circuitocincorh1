@@ -81,7 +81,7 @@ export function payPeriod(year, month, half) {
   const prefix = `${year}-${String(month).padStart(2, '0')}`;
   return { start: `${prefix}-${half === 1 ? '01' : '16'}`, end: `${prefix}-${half === 1 ? '15' : new Date(Date.UTC(year, month, 0)).getUTCDate()}`, year, month, half };
 }
-export function payrollAmounts(salaryCents, inputs, half = 1) {
+export function payrollAmounts(salaryCents, inputs, half = 1, {deferNetValidation=false} = {}) {
   // Un céntimo impar se asigna a la primera quincena; ambas suman el mes exacto.
   const automatic = half === 2 ? Math.floor(Number(salaryCents) / 2) : Math.ceil(Number(salaryCents) / 2);
   const base = inputs.base_override === '' || inputs.base_override == null ? automatic : money(inputs.base_override, 'Salario ajustado');
@@ -94,6 +94,6 @@ export function payrollAmounts(salaryCents, inputs, half = 1) {
   const otherReason = text(inputs.other_reason, 'Detalle de otras deducciones', { optional: other === 0, max: 1000 });
   const gross = base + commissions;
   const deductions = caja + renta + loan + other;
-  if (deductions > gross) throw new AppError('Las deducciones no pueden superar los ingresos de esta quincena.');
+  if (!deferNetValidation && deductions > gross) throw new AppError('Las deducciones no pueden superar los ingresos de esta quincena.');
   return { automatic, base, commissions, caja, renta, loan, other, gross, deductions, net: gross - deductions, adjustment_reason: adjustmentReason, other_reason: otherReason };
 }

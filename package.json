@@ -14,8 +14,8 @@
     "db:stop": "node scripts/local-postgres.js stop",
     "db:migrate": "node --env-file-if-exists=.env scripts/migrate.js",
     "backup": "node --env-file-if-exists=.env scripts/backup.js",
-    "test": "node --test tests/domain.test.js tests/aguinaldo.test.js",
-    "test:integration": "node --env-file-if-exists=.env --test --test-concurrency=1 tests/integration.test.js tests/employee-codes.test.js tests/aguinaldo.integration.test.js",
+    "test": "node --test tests/domain.test.js tests/aguinaldo.test.js tests/deductions.test.js",
+    "test:integration": "node --env-file-if-exists=.env --test --test-concurrency=1 tests/integration.test.js tests/employee-codes.test.js tests/aguinaldo.integration.test.js tests/deductions.integration.test.js",
     "test:backup": "node --env-file-if-exists=.env --test tests/backup.test.js",
     "test:browser": "node --env-file-if-exists=.env tests/browser.js"
   },

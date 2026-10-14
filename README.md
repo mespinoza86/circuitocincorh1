@@ -91,17 +91,29 @@ Los reportes muestran las fechas registradas durante el año y hasta la fecha se
 - Salario base mensual guardado en el perfil. Primera quincena: 1–15; segunda: 16–último día del mes.
 - Se utiliza el salario mensual actual del perfil al crear y revisar borradores; no se seleccionan salarios históricos automáticamente por fecha. Las colillas cerradas sí conservan su salario original.
 - Cada quincena completa recibe la mitad del salario mensual. Si el salario contiene un céntimo impar, la primera recibe ese céntimo y la segunda la diferencia, de modo que ambas sumen exactamente el salario mensual.
-- Comisiones, Caja, renta, préstamo y otras deducciones se escriben por quincena. Cada borrador inicia esos campos en cero y requiere revisión explícita.
-- No se calculan tasas legales, ni se controla el capital de un préstamo en esta versión.
+- En nóminas manuales, Caja y renta se escriben por quincena. Las automáticas, habilitadas desde Configuración para nuevos periodos desde noviembre de 2026, calculan Caja, renta y aporte patronal. Octubre permite comparación de prueba sin alterar importes.
+- Las comisiones se pagan en la primera quincena del modo automático. Préstamos y otras deducciones siguen manuales, sin control de capital del préstamo. Cada trabajador debe revisarse explícitamente.
 - Si hay ingreso o salida durante el periodo, el administrador escribe el importe salarial correspondiente y un motivo. Puede conservar la mitad normal dejando un motivo que explique su revisión.
 - Las otras deducciones también requieren descripción. Se evita guardar un salario neto negativo.
-- **Neto = salario quincenal revisado + comisiones − Caja − renta − préstamos − otras deducciones.**
+- **Neto = salario quincenal revisado + comisiones + devolución de renta − Caja − renta − préstamos − otras deducciones.** La devolución no es ingreso salarial para aguinaldo o bases de deducción.
 - Se puede actualizar la plantilla de un borrador si se incorporan empleados o se corrigen fechas de relación laboral. Se conservan los importes de quienes permanecen en el periodo.
 - Un cierre requiere que todos los trabajadores estén revisados y que sus perfiles no hayan cambiado desde su última revisión.
 - Las nóminas cerradas conservan los datos del empleado, su correo, la empresa y los importes del periodo. No se reabren ni modifican en esta versión; los procedimientos de anulación y nómina correctiva quedan para una etapa posterior.
 - Las colillas pueden consultarse en PDF desde un borrador, marcado como tal. El envío por correo requiere una nómina cerrada.
 - Puede guardar el PDF desde el visor del navegador. El PDF utiliza la etiqueta CRC para la moneda.
 - Puede exportar CSV de nómina y vacaciones; las celdas que podrían interpretarse como fórmulas se neutralizan.
+
+## Deducciones automáticas, octubre de prueba y noviembre oficial
+
+Siga [DEDUCCIONES.md](DEDUCCIONES.md) para configurar porcentajes/tramos y revisar excepciones. **Configuración → Configurar deducciones** permite guardar porcentajes obrero/patronal independientes, vigencia y tramos progresivos mensuales, con historial de versiones. La configuración se guarda en la base de cada equipo; los valores de desarrollo no se copian a producción.
+
+Octubre de 2026 permanece manual: **Comparar deducciones** muestra una simulación con lo ya ingresado, sin alterar colillas cerradas. Desde noviembre, los nuevos borradores son automáticos al habilitar reglas. Borradores anteriores requieren activación expresa; meses con quincenas manuales cerradas se conservan manuales.
+
+La renta del mismo mes se retiene completa en primera con el ingreso mensual previsto; segunda usa el bruto real y propone el cobro/devolución pendiente. La conciliación requiere aprobación y motivo. Excepciones permiten ingresar el salario ajustado correcto con fechas/referencia; no calculan subsidios automáticamente. Las tasas/bases quedan guardadas con la nómina y los cambios posteriores exigen nueva revisión antes del cierre.
+
+**Aportes y renta** es exclusivo de administradores: por trabajador, quincena y mes muestra Caja, aporte patronal y retención neta. Incluye propuestas de ajustes posteriores, registro de aplicación/cancelación y comprobante PDF, sin modificar colillas originales. No ejecuta pagos bancarios o declaraciones fiscales. Las colillas del trabajador excluyen costos patronales.
+
+Se necesita una versión de reglas para cada año: la tabla de renta de un año anterior no se reutiliza sin confirmación. Para instalar esta mejora se agrega `004-deductions.sql`; la migración se probó con filas existentes y está aplicada en desarrollo. En el servidor siga ACTUALIZACIONES.md, conservando su base/configuración, y luego ingrese allí los porcentajes reales.
 
 ## Aguinaldo e historial salarial
 

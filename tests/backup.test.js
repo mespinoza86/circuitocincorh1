@@ -25,6 +25,15 @@ test('pg_dump y pg_restore recuperan estructura y datos en una base aislada',asy
     const created=await fetch(instance.base+'/api/employees',{method:'POST',headers,body:JSON.stringify(employee({code:'CC0001'}))});assert.equal(created.status,201);
     const worker=await created.json();
     const historical=await fetch(instance.base+'/api/salary-history',{method:'POST',headers,body:JSON.stringify({employee_id:worker.id,year:2025,month:9,gross:'1200000.01',note:'Histórico restaurado de prueba'})});assert.equal(historical.status,201);
+    async function operation(path,method='GET',body,status=200){const response=await fetch(instance.base+'/api'+path,{method,headers,body:body===undefined?undefined:JSON.stringify(body)});const data=await response.json();assert.equal(response.status,status,JSON.stringify(data));return data;}
+    await operation('/deduction-settings','POST',{revision:1,effective_from:'2026-10-01',worker_rate:'10.83',employer_rate:'26.83',enabled:true,note:'Reglas restauradas de prueba',brackets:[{up_to:'918000',rate:0},{up_to:'1347000',rate:10},{up_to:'2364000',rate:15},{up_to:'4727000',rate:20},{up_to:'',rate:25}]},201);
+    async function periodPayment(month,half,data){const p=await operation('/payroll','POST',{year:2026,month,half},201),i=(await operation(`/payroll/${p.id}`)).items[0];const preview=await operation(`/payroll/${p.id}/items/${i.id}/deduction-preview`,'POST',data);const saved=await operation(`/payroll/${p.id}/items/${i.id}`,'PUT',{...data,revision:i.revision,deduction_review:preview.review});await operation(`/payroll/${p.id}/close`,'POST',{});return saved;}
+    await periodPayment(11,1,{commissions:'800000'});
+    const refunded=await periodPayment(11,2,{base_override:'250000',adjustment_reason:'Salario ajustado de prueba',confirm_tax_adjustment:true,tax_adjustment_note:'Conciliación restaurada'});assert.equal(refunded.tax_refund_cents,'3750000');
+    await periodPayment(12,1,{commissions:'800000'});
+    await operation(`/employees/${worker.id}`,'PUT',employee({code:'CC0001',revision:worker.revision,active:false,termination_date:'2026-12-15'}));
+    const proposed=await operation('/tax-adjustments','POST',{employee_id:worker.id,year:2026,month:12,reason:'Salida registrada para restauración'},201);
+    await operation(`/tax-adjustments/${proposed.id}/apply`,'POST',{revision:1,confirm:true,reference:'Aplicación y revisión contable ficticias'});
     await instance.pool.query("UPDATE company SET name='Empresa restaurada de prueba',legal_id='3-101-123456' WHERE id=1");
     await instance.pool.query("INSERT INTO holidays(id,day,name) VALUES($1,'2027-05-01','Feriado restaurado')",[randomUUID()]);
     await instance.pool.query('UPDATE employee_code_counter SET last_value=42 WHERE id=1');
@@ -41,6 +50,10 @@ test('pg_dump y pg_restore recuperan estructura y datos en una base aislada',asy
     assert.equal((await restored.query('SELECT last_value FROM employee_code_counter WHERE id=1')).rows[0].last_value,'42');
     const salary=(await restored.query('SELECT * FROM salary_history')).rows[0];
     assert.equal(salary.employee_id,worker.id);assert.equal(salary.gross_cents,'120000001');assert.equal(salary.active,true);assert.equal(salary.note,'Histórico restaurado de prueba');
+    const payment=(await restored.query('SELECT * FROM payroll_items WHERE id=$1',[refunded.id])).rows[0];assert.equal(payment.tax_refund_cents,'3750000');assert.deepEqual(payment.deduction_snapshot,refunded.deduction_snapshot);assert.equal(payment.employer_cents,refunded.employer_cents);
+    assert.equal((await restored.query('SELECT enabled FROM deduction_control WHERE id=1')).rows[0].enabled,true);
+    assert.equal((await restored.query('SELECT note FROM deduction_rules')).rows[0].note,'Reglas restauradas de prueba');
+    const adjustment=(await restored.query('SELECT * FROM tax_adjustments WHERE id=$1',[proposed.id])).rows[0];assert.equal(adjustment.status,'applied');assert.equal(adjustment.delta_cents,proposed.delta_cents);assert.equal(adjustment.reference,'Aplicación y revisión contable ficticias');
   }finally {
     if(restored){await restored.end();await instance.pool.query(`DROP DATABASE "${restoredName}"`);}
     await instance.close();

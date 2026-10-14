@@ -58,4 +58,35 @@ Si falla respaldo, Git, instalación o migración, detenerse y conservar el mens
 - Agregar un teléfono adicional: una nueva migración agrega el campo con un tratamiento compatible para empleados existentes.
 - Modificar una regla de vacaciones: además de conservar filas, revisar el efecto sobre saldos y movimientos históricos. Las colillas cerradas deben conservar sus instantáneas.
 
+## Entrega de deducciones después de aguinaldo
+
+Octubre 2026 queda como comparación de prueba y noviembre como inicio oficial, habilitado mediante la configuración del servidor. El código de deducciones está en desarrollo, todavía sin commit/push de esta mejora. Lea [DEDUCCIONES.md](DEDUCCIONES.md).
+
+1. Entregar/verificar aguinaldo del commit 2e3acad antes de publicar la segunda versión, cuando sea posible.
+2. Guardar y subir la versión validada de deducciones. La nueva migración 004-deductions.sql agrega reglas, control y ajustes y columnas compatibles en nómina; no sustituye tablas ni modifica importes anteriores.
+3. En producción, detener Node, conservar PostgreSQL, comprobar Git y respaldar con resultado verificado. Descargar, npm.cmd ci, npm.cmd run db:migrate y arrancar, uno por uno.
+4. Comprobar empleados y colillas previas, el menú Aportes y renta y el modo manual de periodos anteriores. La configuración inicia deshabilitada; ingresar porcentajes/tramos reales y habilitarla allí. Los valores guardados en la base de desarrollo no viajan por Git.
+5. Comparar octubre sin aplicar. Revisar nóminas oficiales desde noviembre con tasas guardadas. Si ya hay un borrador manual, activarlo expresamente; si el mes tiene una quincena manual cerrada, conservar el mes y no mezclar modos.
+
+Si el servidor descarga ambas mejoras juntas, el ejecutor aplica 003 y después 004 en la misma operación transaccional de migraciones, omitiendo lo ya registrado. No es necesario ejecutar cada SQL manualmente ni restaurar una base de pruebas. Si falla un comando, detenerse y revisar el error; conservar .env/.local y el respaldo.
+
+## Actualización de aguinaldo (commit 2e3acad)
+
+El commit «Agregar aguinaldo e historial salarial mensual» debe subirse primero al remoto con git push desde desarrollo. La instrucción dada al usuario es actualizar el clon existente del servidor Windows, con las operaciones detenidas y PostgreSQL activo, conservando su configuración.
+
+1. Detener Node.js con Ctrl+C; conservar la terminal original si allí se definieron HOST, PORT y APP_ORIGIN.
+2. Desde la carpeta del proyecto del servidor, ejecutar git status --short (debe estar limpio), git branch --show-current (main) y git rev-parse HEAD (guardar versión previa). Revisar cualquier cambio inesperado antes de actualizar.
+3. Ejecutar npm.cmd run backup y comprobar el mensaje Copia guardada. Conservar una copia protegida del .dump fuera del disco del servidor.
+4. Ejecutar git pull --ff-only. Comprobar la versión con git log -1 --oneline y que Test-Path ".\db\003-aguinaldo.sql" devuelva True. La versión esperada es 2e3acad o una posterior que la contenga. Si Git dice que ya está actualizado pero falta la migración, revisar push, rama y repositorio antes de seguir.
+5. Ejecutar npm.cmd ci y esperar a que termine sin errores.
+6. Ejecutar npm.cmd run db:migrate. El mensaje esperado es Base de datos actualizada. La migración 003-aguinaldo.sql agrega salary_history: no borra, recrea ni cambia empleados o nóminas existentes. Las migraciones ya registradas no se repiten.
+7. Volver a iniciar con npm.cmd start, usando la terminal/configuración de red que ya funcionaba. Mantener la ventana abierta.
+8. Abrir la dirección habitual del servidor y recargar con Ctrl+F5. Revisar perfiles y nóminas anteriores, la nueva sección Aguinaldo y sus detalles/pendientes antes de reanudar operaciones.
+
+Ejecutar cada paso por separado y detenerse si falla. No usar setup:local, restaurar una base de desarrollo, reemplazar .env/.local o crear las tablas manualmente para esta actualización. No se requiere reinstalar Node.js/PostgreSQL si la instalación existente funciona.
+
+Las nóminas guardadas cuentan cuando están cerradas y su periodo terminó al corte, según la preferencia confirmada. Cargar ingresos anteriores mediante Aguinaldo → Registrar salario histórico: bruto mensual real con referencia, solo en meses que no tengan nómina del empleado. Una quincena faltante de un mes con nómina se completa en Nómina, sin añadir un histórico encima. La tabla se crea vacía: no inventa salarios pasados.
+
+Estas son instrucciones; no se ejecutaron pasos en el servidor ni se comprobó la publicación del commit en el remoto.
+
 Esta guía no ejecuta una actualización real. El servidor no fue inspeccionado ni modificado desde esta computadora. HTTPS, arranque automático y respaldo programado siguen siendo los pendientes ya documentados.

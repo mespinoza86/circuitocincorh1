@@ -1,5 +1,5 @@
 import {chromium} from 'playwright';
-import {existsSync,mkdirSync,readdirSync} from 'node:fs';
+import {existsSync,mkdirSync,readdirSync,readFileSync,writeFileSync} from 'node:fs';
 import {join,resolve} from 'node:path';
 import assert from 'node:assert/strict';
 import {testServer,admin,employee} from './helpers.js';
@@ -20,6 +20,7 @@ try {
   const executable=process.env.BROWSER_PATH||cached||'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe';
   browser=await chromium.launch({executablePath:executable,headless:true});
   const context=await browser.newContext({viewport:{width:1440,height:1000},locale:'es-CR'});
+  context.setDefaultTimeout(15000);
   const page=await context.newPage();page.on('pageerror',e=>errors.push(e.message));page.on('console',msg=>{if(msg.type()==='error' && !(expectedConflict && /status of 409/.test(msg.text())))errors.push(msg.text());});
   await page.goto(instance.base);
   await page.getByRole('heading',{name:'Crea tu espacio de trabajo.'}).waitFor();
@@ -151,6 +152,49 @@ try {
   await page.getByRole('button',{name:'Reportes',exact:true}).click();await page.getByRole('heading',{name:'Información para decidir'}).waitFor();await page.getByRole('button',{name:'Exportar CSV',exact:true}).waitFor({state:'visible'});
   const downloadPromise=page.waitForEvent('download');await page.getByRole('button',{name:'Exportar CSV',exact:true}).click();const download=await downloadPromise;assert.match(download.suggestedFilename(),/^vacaciones-/);
   await page.getByRole('button',{name:'Configuración',exact:true}).click();await page.getByRole('heading',{name:'Tu espacio de trabajo'}).waitFor();assert.ok(await page.getByText('Historial de cambios',{exact:true}).isVisible());
+  // Configuración y datos ficticios: octubre compara y noviembre aplica el cálculo oficial.
+  await page.getByRole('button',{name:'Configurar deducciones',exact:true}).click();
+  await page.getByLabel('Caja del trabajador (%)').fill('10.83');await page.getByLabel('Aporte patronal (%)').fill('26.83');await page.getByLabel('Referencia de las reglas').fill('Configuración ficticia de prueba 2026');
+  await page.getByRole('button',{name:'Guardar configuración',exact:true}).click();await page.locator('#modal').waitFor({state:'hidden'});
+  await page.screenshot({path:join(resultDirectory,'deduction-settings.png'),fullPage:true});
+  const update=await context.request.put(instance.base+`/api/employees/${lucia.id}`,{headers:{'X-CSRF-Token':csrf},data:employee({...e,revision:lucia.revision,monthly_salary:'600000'})});assert.equal(update.status(),200);
+  const authHeaders={'X-CSRF-Token':csrf};
+  async function makePeriod(month,half){const result=await context.request.post(instance.base+'/api/payroll',{headers:authHeaders,data:{year:2026,month,half}});assert.equal(result.status(),201);return result.json();}
+  async function itemsOf(p){return (await (await context.request.get(instance.base+`/api/payroll/${p.id}`)).json()).items;}
+  async function saveOthers(p) {
+    for(const i of (await itemsOf(p)).filter(i=>i.employee_id!==lucia.id)) {
+      let body={revision:i.revision};
+      if(p.deduction_mode==='automatic'){const prev=await context.request.post(instance.base+`/api/payroll/${p.id}/items/${i.id}/deduction-preview`,{headers:authHeaders,data:{}});assert.equal(prev.status(),200);body.deduction_review=(await prev.json()).review;}
+      assert.equal((await context.request.put(instance.base+`/api/payroll/${p.id}/items/${i.id}`,{headers:authHeaders,data:body})).status(),200);
+    }
+  }
+  async function openPeriod(p){await page.reload();await page.getByRole('heading',{name:'Todo tu equipo, en un vistazo.'}).waitFor();await page.getByRole('button',{name:'Nómina',exact:true}).click();await page.locator(`[data-action="payroll-open"][data-id="${p.id}"]`).click();}
+  async function closePeriodUi(){await page.getByRole('button',{name:'Cerrar nómina',exact:true}).click();await page.getByLabel('Confirmo que revisé los importes de todos los trabajadores.').check();await page.getByRole('button',{name:'Cerrar y conservar importes'}).click();await page.locator('#modal').waitFor({state:'hidden'});await page.getByText('Nómina cerrada.',{exact:true}).waitFor();}
+  const october=await makePeriod(10,1);const octItem=(await itemsOf(october)).find(i=>i.employee_id===lucia.id);
+  assert.equal((await context.request.put(instance.base+`/api/payroll/${october.id}/items/${octItem.id}`,{headers:authHeaders,data:{revision:octItem.revision,commissions:'800000',caja:'123',renta:'50850'}})).status(),200);
+  await saveOthers(october);assert.equal((await context.request.post(instance.base+`/api/payroll/${october.id}/close`,{headers:authHeaders,data:{}})).status(),200);
+  const originalOct=(await itemsOf(october)).find(i=>i.id===octItem.id);
+  await openPeriod(october);await page.getByRole('button',{name:`Comparar deducciones de ${e.full_name}`,exact:true}).click();await page.getByText('Simulación informativa. No aplica rebajos ni cambia la colilla original.',{exact:true}).waitFor();
+  await page.screenshot({path:join(resultDirectory,'deductions-trial.png'),fullPage:true});await page.getByRole('button',{name:'Cerrar ventana'}).click();assert.deepEqual((await itemsOf(october)).find(i=>i.id===octItem.id),originalOct);
+  const november1=await makePeriod(11,1);await openPeriod(november1);
+  await page.getByRole('button',{name:`Revisar pago de ${e.full_name}`,exact:true}).click();assert.equal(await page.getByLabel('Caja (₡)').getAttribute('readonly'),'');
+  await page.getByLabel('Comisiones (₡)').fill('800000');await page.getByRole('button',{name:'Calcular deducciones y revisar',exact:true}).click();await page.locator('#deduction-preview .preview-card').waitFor();
+  assert.equal(await page.getByLabel('Renta (₡)').inputValue(),'50850');assert.equal(await page.getByLabel('Caja (₡)').inputValue(),'119130');
+  await page.getByRole('button',{name:'Guardar como revisado'}).click();await page.locator('#modal').waitFor({state:'hidden'});await saveOthers(november1);await openPeriod(november1);await closePeriodUi();
+  const november2=await makePeriod(11,2);await openPeriod(november2);await page.getByRole('button',{name:`Revisar pago de ${e.full_name}`,exact:true}).click();
+  await page.getByLabel('Salario quincenal ajustado (₡)').fill('150000');await page.getByLabel('Motivo del salario revisado o ajustado').fill('Salario salarial corregido por incapacidad ficticia');
+  await page.getByLabel('Inicio de excepción').fill('2026-11-16');await page.getByLabel('Fin de excepción').fill('2026-11-30');await page.getByLabel('Referencia de excepción').fill('Boleta de prueba');await page.getByLabel('Motivo de excepción',{exact:true}).fill('Incapacidad');
+  await page.getByRole('button',{name:'Calcular deducciones y revisar',exact:true}).click();await page.getByLabel('Revisé y autorizo la diferencia de renta del mes.').waitFor();assert.match(await page.locator('#deduction-preview').innerText(),/17[\s\u00a0]*650/);
+  await page.screenshot({path:join(resultDirectory,'deductions-refund.png'),fullPage:true});await page.setViewportSize({width:390,height:844});assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>window.innerWidth),false);await page.screenshot({path:join(resultDirectory,'deductions-refund-mobile.png'),fullPage:true});await page.setViewportSize({width:1440,height:1000});
+  await page.getByLabel('Revisé y autorizo la diferencia de renta del mes.').check();await page.getByLabel('Motivo de la conciliación').fill('Revisión contable de prueba');await page.getByRole('button',{name:'Guardar como revisado'}).click();await page.locator('#modal').waitFor({state:'hidden'});
+  await saveOthers(november2);await openPeriod(november2);await closePeriodUi();
+  const finalPayment=(await itemsOf(november2)).find(i=>i.employee_id===lucia.id);assert.equal(finalPayment.tax_refund_cents,'1765000');assert.equal(finalPayment.gross_cents,'15000000');
+  const payrollDownload=page.waitForEvent('download');await page.getByRole('button',{name:'Exportar CSV',exact:true}).click();const payrollCsv=readFileSync(await (await payrollDownload).path(),'utf8');assert.ok(payrollCsv.includes('Devolución de renta'));assert.ok(payrollCsv.includes('17650.00'));
+  const refundPdf=await context.request.get(instance.base+`/api/payslips/${finalPayment.id}.pdf`);assert.equal(refundPdf.status(),200);writeFileSync(join(resultDirectory,'payslip-refund.pdf'),await refundPdf.body());
+  await page.getByRole('button',{name:'Aportes y renta',exact:true}).click();await page.getByRole('heading',{name:'Aportes y renta',exact:true}).waitFor();await page.getByLabel('Mes de aportes').selectOption('11');await page.getByRole('button',{name:'Consultar',exact:true}).click();await page.getByText(/17[\s\u00a0]*650,00/).first().waitFor();
+  await page.screenshot({path:join(resultDirectory,'employer-report.png'),fullPage:true});
+  const employerDownload=page.waitForEvent('download');await page.getByRole('button',{name:'Exportar CSV',exact:true}).click();assert.equal((await employerDownload).suggestedFilename(),'aportes-2026-11.csv');
+  console.log('✓ Configuración, octubre sin mutaciones, noviembre oficial, incapacidad/devolución, aprobación y reporte patronal.');
   await page.setViewportSize({width:390,height:844});await page.getByRole('button',{name:'Abrir menú'}).click();await page.getByRole('button',{name:'Resumen',exact:true}).click();await page.getByRole('heading',{name:'Todo tu equipo, en un vistazo.'}).waitFor();
   assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>window.innerWidth),false);
   await page.screenshot({path:join(resultDirectory,'mobile.png'),fullPage:true});console.log('✓ Reportes, exportación CSV, historial y vista móvil sin desbordamiento.');
